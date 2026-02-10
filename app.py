@@ -6,7 +6,7 @@ import math
 from datetime import datetime
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC HUD v7", page_icon="✈️")
+st.set_page_config(layout="wide", page_title="BA OCC HUD v8", page_icon="✈️")
 
 # 2. HUD CSS STYLING
 st.markdown("""
@@ -17,32 +17,37 @@ st.markdown("""
     input { color: #333333 !important; }
     div[data-baseweb="select"] div { color: #333333 !important; }
 
-    /* TOP COMMAND BAR - PILL DESIGN */
+    /* TOP COMMAND BAR (Now above the map) */
     .top-command-bar {
-        position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-        z-index: 1000; background: rgba(0, 35, 102, 0.95); padding: 10px 30px;
-        border-radius: 50px; border: 1px solid #005a9c; min-width: 500px;
+        position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+        z-index: 1001; background: rgba(0, 35, 102, 0.95); padding: 12px 40px;
+        border-radius: 50px; border: 2px solid #005a9c; min-width: 600px;
         display: flex; justify-content: space-around; align-items: center;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.4);
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.6);
     }
     
+    /* ENHANCED LIVE ALERTS (Wider for dual weather strings) */
     .floating-alerts {
-        position: absolute; top: 85px; right: 20px; z-index: 1000;
-        background: rgba(0, 35, 102, 0.9); padding: 15px; border-radius: 8px;
-        border: 1px solid #005a9c; width: 280px; max-height: 55vh; overflow-y: auto;
+        position: absolute; top: 100px; right: 20px; z-index: 1000;
+        background: rgba(0, 35, 102, 0.92); padding: 15px; border-radius: 8px;
+        border: 1px solid #005a9c; width: 450px; max-height: 65vh; overflow-y: auto;
     }
+    
+    .wx-text { font-size: 14px !important; font-family: monospace; line-height: 1.4; margin-top: 5px; }
+    .metar-label { color: #ff4b4b; font-weight: bold; font-size: 11px; }
+    .taf-label { color: #3182bd; font-weight: bold; font-size: 11px; }
 
     .floating-analysis {
         position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
         z-index: 1001; background: rgba(255, 255, 255, 0.98); padding: 20px; 
-        border-radius: 8px; width: 80%; max-width: 1100px; 
+        border-radius: 8px; width: 85%; max-width: 1200px; 
         border-top: 10px solid #d6001a; color: #002366 !important;
         box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
     }
     .floating-analysis h3, .floating-analysis p, .floating-analysis b { color: #002366 !important; }
 
-    div.stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; font-weight: bold; }
-    div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; font-weight: bold; }
+    div.stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; font-weight: bold; border-radius: 4px; }
+    div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; font-weight: bold; border-radius: 4px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -136,23 +141,31 @@ for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=14 if mkr['iata'] == st.session_state.investigate_iata else 7, color=mkr['color'], fill=True, fill_opacity=0.8, popup=folium.Popup(popup_html, max_width=400)).add_to(m)
 st_folium(m, width=2200, height=1200, key="fullscreen_final")
 
-# 2. HUD ELEMENTS
+# 2. TOP COMMAND BAR (HUD)
 if ui_visible:
-    st.markdown(f"""<div class="top-command-bar"><div style="font-size:14px;"><b>CITYFLYER:</b> {counts['Cityflyer']['G']}G | {counts['Cityflyer']['A']}A | {counts['Cityflyer']['R']}R</div><div style="font-size:14px; border-left: 1px solid #005a9c; padding-left: 20px;"><b>EUROFLYER:</b> {counts['Euroflyer']['G']}G | {counts['Euroflyer']['A']}A | {counts['Euroflyer']['R']}R</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="top-command-bar"><div style="font-size:15px; font-weight:bold;">CITYFLYER: {counts['Cityflyer']['G']}G | {counts['Cityflyer']['A']}A | {counts['Cityflyer']['R']}R</div><div style="font-size:15px; border-left: 2px solid #005a9c; padding-left: 25px; font-weight:bold;">EUROFLYER: {counts['Euroflyer']['G']}G | {counts['Euroflyer']['A']}A | {counts['Euroflyer']['R']}R</div></div>""", unsafe_allow_html=True)
     
+    # 3. ALERTS WITH DUAL METAR/TAF (HUD)
     with st.container():
         st.markdown('<div class="floating-alerts">', unsafe_allow_html=True)
-        st.write("⚠️ LIVE ALERTS")
+        st.markdown("<h4 style='margin-bottom:10px;'>🚨 ACTIVE ALERTS</h4>", unsafe_allow_html=True)
         for iata, d in active_alerts.items():
-            if st.button(f"{iata}: {d['reason']}", key=f"btn_{iata}", type="primary" if d['type'] == "red" else "secondary"):
+            st.markdown(f"<hr style='margin:10px 0; border:0.5px solid #555;'>", unsafe_allow_html=True)
+            if st.button(f"🔍 INVESTIGATE {iata} ({d['reason']})", key=f"btn_{iata}", type="primary" if d['type'] == "red" else "secondary"):
                 st.session_state.investigate_iata = iata; st.session_state.minimized = False; st.rerun()
+            
+            # Display Dual Weather directly in Alert panel
+            st.markdown(f"""
+                <div class='wx-text'>
+                    <span class='metar-label'>CURRENT:</span> {d['m']}<br>
+                    <span class='taf-label'>FORECAST:</span> {d['t']}
+                </div>
+            """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# 3. DIVERSION ASSIST ANALYSIS
+# 4. ANALYSIS (HUD)
 if st.session_state.investigate_iata in active_alerts and ui_visible:
     d = active_alerts[st.session_state.investigate_iata]
-    
-    # Calculate Nearest Alternate
     alt_name = "N/A"; alt_dist = 9999
     for g_iata in green_stations:
         dist = get_dist(d['lat'], d['lon'], airports[g_iata]['lat'], airports[g_iata]['lon'])
@@ -162,11 +175,11 @@ if st.session_state.investigate_iata in active_alerts and ui_visible:
         st.markdown(f"""
         <div class="floating-analysis">
             <h3 style="margin:0;">{st.session_state.investigate_iata} OPERATIONAL ANALYSIS</h3>
-            <p><b>ISSUE:</b> {d['reason']} detected. Current conditions below standard minima.</p>
-            <p style="color:#d6001a !important;"><b>DIVERSION PLANNING:</b> Closest Green station is <b>{alt_name}</b> ({alt_dist} NM).</p>
-            <p><b>OUTLOOK:</b> Forecast suggests probability of <b>ATC holding or slots</b>. Expect <b>long delays</b>.</p>
+            <p><b>ISSUE:</b> {d['reason']} detected. Conditions currently below minima.</p>
+            <p style="color:#d6001a !important; font-size:18px;"><b>DIVERSION PLANNING:</b> Nearest Green station is <b>{alt_name}</b> ({alt_dist} NM).</p>
+            <p><b>OUTLOOK:</b> This forecast may cause diversions or ATC slots. Long delays expected to the operation.</p>
             <hr style="border:0.5px solid #ddd;">
-            <p style="font-size:11px; background:#f4f4f4; padding:8px;"><b>TAF:</b> {d['t']}</p>
+            <p style="font-size:13px; font-family:monospace; background:#f4f4f4; padding:10px;"><b>METAR:</b> {d['m']}<br><b>TAF:</b> {d['t']}</p>
         </div>
         """, unsafe_allow_html=True)
         c1, c2 = st.columns(2)
@@ -175,5 +188,5 @@ if st.session_state.investigate_iata in active_alerts and ui_visible:
         with c2:
             if st.button("✖ CLOSE"): st.session_state.investigate_iata = "None"; st.rerun()
     else:
-        if st.button(f"🔼 EXPAND {st.session_state.investigate_iata} ALTERNATE: {alt_name}"):
+        if st.button(f"🔼 EXPAND {st.session_state.investigate_iata} - ALT: {alt_name} ({alt_dist} NM)"):
             st.session_state.minimized = False; st.rerun()

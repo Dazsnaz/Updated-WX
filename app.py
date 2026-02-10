@@ -36,9 +36,21 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 3. CORE STATION DATABASE (Always show these as baseline)
+# UPDATE THIS SECTION IN YOUR app.py
 baseline_icao = {
-    "LCY": "EGLC", "LGW": "EGKK", "AMS": "EHAM", "DUB": "EIDW", "JER": "EGJJ",
-    "INN": "LOWI", "FLR": "LIRQ", "PMI": "LEPA", "NCE": "LFMN", "GVA": "LSGG"
+    "LCY": "EGLC",  # Cityflyer Hub
+    "LGW": "EGKK",  # Euroflyer Hub
+    "AMS": "EHAM",
+    "DUB": "EIDW",
+    "JER": "EGJJ",
+    "INN": "LOWI",
+    "FLR": "LIRQ",
+    "PMI": "LEPA",
+    "NCE": "LFMN",
+    "GVA": "LSGG",
+    "RTM": "EHRD",
+    "EDI": "EGPH",
+    "GLA": "EGPF"
 }
 
 # 4. API FETCH LOGIC

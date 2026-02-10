@@ -8,43 +8,56 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️")
 
-# 2. LAYERED UI STYLING
+# 2. LAYERED UI STYLING (Fixed Sidebar & Input Visibility)
 st.markdown("""
     <style>
+    /* Fullscreen Map container */
     .main .block-container { padding: 0; max-width: 100%; }
-    html, body, [class*="st-"], div, p, h1, h2, h3, h4, label { color: white !important; }
+    
+    /* Sidebar Styling */
     [data-testid="stSidebar"] { background-color: #002366 !important; }
+    
+    /* FIX: Input field text color (Search & Dropdowns) */
+    input { color: #333333 !important; }
+    div[data-baseweb="select"] div { color: #333333 !important; }
+    
+    /* FIX: Labels and Checkbox text */
+    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: white !important; }
 
     /* FLOATING DASHBOARD */
     .floating-stats {
         position: absolute; top: 10px; left: 60px; z-index: 1000;
-        background: rgba(0, 35, 102, 0.8); padding: 15px; border-radius: 8px;
+        background: rgba(0, 35, 102, 0.85); padding: 15px; border-radius: 8px;
         border: 1px solid #005a9c; min-width: 350px;
     }
     
     /* FLOATING ALERTS */
     .floating-alerts {
         position: absolute; top: 10px; right: 20px; z-index: 1000;
-        background: rgba(0, 35, 102, 0.8); padding: 15px; border-radius: 8px;
+        background: rgba(0, 35, 102, 0.85); padding: 15px; border-radius: 8px;
         border: 1px solid #005a9c; width: 300px; max-height: 70vh; overflow-y: auto;
     }
 
     /* BOTTOM ANALYSIS */
     .floating-analysis {
         position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-        z-index: 1001; background: rgba(255, 255, 255, 0.95); padding: 20px; 
-        border-radius: 8px; width: 80%; max-width: 900px; 
-        border-top: 10px solid #002366; color: #002366 !important;
+        z-index: 1001; background: rgba(255, 255, 255, 0.98); padding: 25px; 
+        border-radius: 8px; width: 85%; max-width: 1000px; 
+        border-top: 10px solid #d6001a; color: #002366 !important;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.5);
     }
-    .floating-analysis * { color: #002366 !important; }
+    .floating-analysis h3, .floating-analysis p, .floating-analysis b { color: #002366 !important; }
 
-    div.stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; font-weight: bold; width: 100%; }
-    div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; font-weight: bold; width: 100%; }
+    /* Button Overrides */
+    div.stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; font-weight: bold; width: 100%; border: none; }
+    div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; font-weight: bold; width: 100%; border: none; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. COMPLETE 42 AIRPORT DATABASE
+# 3. FULL 42 AIRPORT DATABASE
 airports = {
+    # CITYFLYER
     "LCY": {"icao": "EGLC", "name": "London City", "fleet": "Cityflyer", "rwy": 270, "lat": 51.505, "lon": 0.055},
     "AMS": {"icao": "EHAM", "name": "Amsterdam", "fleet": "Cityflyer", "rwy": 180, "lat": 52.313, "lon": 4.764},
     "RTM": {"icao": "EHRD", "name": "Rotterdam", "fleet": "Cityflyer", "rwy": 240, "lat": 51.957, "lon": 4.440},
@@ -66,6 +79,7 @@ airports = {
     "IBZ": {"icao": "LEIB", "name": "Ibiza", "fleet": "Cityflyer", "rwy": 60, "lat": 38.873, "lon": 1.373},
     "PMI": {"icao": "LEPA", "name": "Palma", "fleet": "Cityflyer", "rwy": 240, "lat": 39.551, "lon": 2.738},
     "FAO": {"icao": "LPFR", "name": "Faro", "fleet": "Cityflyer", "rwy": 280, "lat": 37.017, "lon": -7.965},
+    # EUROFLYER
     "LGW": {"icao": "EGKK", "name": "Gatwick", "fleet": "Euroflyer", "rwy": 260, "lat": 51.148, "lon": -0.190},
     "JER": {"icao": "EGJJ", "name": "Jersey", "fleet": "Euroflyer", "rwy": 260, "lat": 49.208, "lon": -2.195},
     "OPO": {"icao": "LPPR", "name": "Porto", "fleet": "Euroflyer", "rwy": 350, "lat": 41.242, "lon": -8.678},
@@ -117,12 +131,12 @@ def get_fleet_weather(airport_dict):
 weather_data = get_fleet_weather(airports)
 
 # SIDEBAR
-st.sidebar.title("🔧 OCC HUD Settings")
-ui_visible = st.sidebar.checkbox("Show HUD Elements", value=True)
-search_iata = st.sidebar.text_input("IATA Search", "").upper()
-fleet_filter = st.sidebar.multiselect("Active Fleet", ["Cityflyer", "Euroflyer"], default=["Cityflyer", "Euroflyer"])
+st.sidebar.title("🔧 OCC HUD SETTINGS")
+ui_visible = st.sidebar.checkbox("DISPLAY OVERLAYS", value=True)
+search_iata = st.sidebar.text_input("SEARCH IATA (ENTER)", "").upper()
+fleet_filter = st.sidebar.multiselect("FLEETS", ["Cityflyer", "Euroflyer"], default=["Cityflyer", "Euroflyer"])
 
-if st.sidebar.button("🔄 Force Refresh"):
+if st.sidebar.button("FORCE REFRESH DATA"):
     st.cache_data.clear()
     st.rerun()
 
@@ -152,7 +166,7 @@ for iata, data in weather_data.items():
         else: counts[info['fleet']]["green"] += 1
         map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "metar": data['raw_metar'], "taf": data['raw_taf']})
 
-# 1. FULLSCREEN MAP
+# 1. THE MAP BACKGROUND
 map_center = [48.0, 5.0]; zoom = 5
 if st.session_state.investigate_iata in airports:
     target = airports[st.session_state.investigate_iata]
@@ -160,27 +174,46 @@ if st.session_state.investigate_iata in airports:
 
 m = folium.Map(location=map_center, zoom_start=zoom, tiles="CartoDB dark_matter", zoom_control=False)
 for mkr in map_markers:
-    popup_html = f"""<div style="width:400px; color:black;"><b>METAR:</b> {mkr['metar']}<br><br><b>TAF:</b> {mkr['taf']}</div>"""
+    popup_html = f"""<div style="width:400px; color:black; font-family:sans-serif;"><b>METAR:</b> {mkr['metar']}<br><br><b>TAF:</b> {mkr['taf']}</div>"""
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=10 if mkr['iata'] == st.session_state.investigate_iata else 6, color=mkr['color'], fill=True, fill_opacity=0.8, popup=folium.Popup(popup_html, max_width=450)).add_to(m)
 
-st_folium(m, width=2200, height=1000, key="fullscreen_occ")
+st_folium(m, width=2200, height=1080, key="fullscreen_occ")
 
-# 2. FLOATING UI
+# 2. FLOATING UI OVERLAYS
 if ui_visible:
-    st.markdown(f"""<div class="floating-stats"><h4 style="margin:0;">BA OCC FLEET STATUS</h4><hr style="margin:5px 0;"><div style="display:flex; justify-content:space-between;"><div><b>CF:</b> {counts['Cityflyer']['green']}G | {counts['Cityflyer']['orange']}A | {counts['Cityflyer']['red']}R</div><div><b>EF:</b> {counts['Euroflyer']['green']}G | {counts['Euroflyer']['orange']}A | {counts['Euroflyer']['red']}R</div></div></div>""", unsafe_allow_html=True)
+    # Stats Panel
+    st.markdown(f"""
+    <div class="floating-stats">
+        <h4 style="margin:0;">BA OCC FLEET STATUS</h4>
+        <hr style="margin:5px 0; border:0.5px solid #005a9c;">
+        <div style="display:flex; justify-content:space-between; font-size:14px;">
+            <div><b>CITYFLYER:</b> {counts['Cityflyer']['green']}G | {counts['Cityflyer']['orange']}A | {counts['Cityflyer']['red']}R</div>
+            <div><b>EUROFLYER:</b> {counts['Euroflyer']['green']}G | {counts['Euroflyer']['orange']}A | {counts['Euroflyer']['red']}R</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
+    # Alerts Sidebar (Floating Right)
     with st.container():
         st.markdown('<div class="floating-alerts">', unsafe_allow_html=True)
-        st.write("⚠️ LIVE ALERTS")
+        st.write("⚠️ OPERATIONAL ALERTS")
         for iata, d in active_alerts.items():
             if st.button(f"{iata}: {d['reason']}", key=f"btn_{iata}", type="primary" if d['type'] == "red" else "secondary"):
                 st.session_state.investigate_iata = iata
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-# 3. ANALYSIS OVERLAY
+# 3. ANALYSIS OVERLAY (Bottom)
 if st.session_state.investigate_iata in active_alerts and ui_visible:
     d = active_alerts[st.session_state.investigate_iata]
-    st.markdown(f"""<div class="floating-analysis"><h3>{st.session_state.investigate_iata} Impact Deep-Dive</h3><p><b>Issue:</b> {d['reason']} detected. Conditions currently below operating limits.</p><p><b>Impact:</b> This may cause diversions or ATC slots. Long delays expected to the operation.</p><hr><p style="font-size:12px;"><b>Full TAF:</b> {d['taf']}</p></div>""", unsafe_allow_html=True)
-    if st.button("Close Analysis"):
+    st.markdown(f"""
+    <div class="floating-analysis">
+        <h3>{st.session_state.investigate_iata} IMPACT ANALYSIS</h3>
+        <p><b>DETECTION:</b> {d['reason']} identified. Local conditions currently below fleet operating limits.</p>
+        <p><b>CONSEQUENCE:</b> This may cause diversions or ATC holding slots. Long delays expected to the operation if trend persists.</p>
+        <hr style="border:0.5px solid #ddd;">
+        <p style="font-size:12px; font-family:monospace; background:#f4f4f4; padding:10px;"><b>FORECAST TAF:</b> {d['taf']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("CLOSE ANALYSIS PANEL"):
         st.session_state.investigate_iata = "None"; st.rerun()

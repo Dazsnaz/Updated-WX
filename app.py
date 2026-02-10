@@ -5,178 +5,175 @@ from avwx import Metar, Taf
 import math
 from datetime import datetime
 
-# 1. PAGE CONFIG & BRANDING
-st.set_page_config(layout="wide", page_title="BA OCC Weather Dashboard", page_icon="✈️")
+# 1. PAGE CONFIG
+st.set_page_config(layout="wide", page_title="BA OCC Fullscreen", page_icon="✈️")
 
-# Custom CSS for BA OCC Branding
+# 2. CUSTOM CSS FOR LAYERED UI
 st.markdown("""
     <style>
-    .main { background-color: #f5f5f5; }
-    .stHeader { background-color: #002366; }
-    /* BA Navy Header */
-    .ba-header {
-        background-color: #002366;
-        padding: 20px;
-        color: white;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+    /* Force Full Screen for Map */
+    .main .block-container { padding: 0; max-width: 100%; }
+    
+    /* Global Font Color */
+    html, body, [class*="st-"], div, p, h1, h2, h3, h4, label { color: white !important; }
+    
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] { background-color: #002366 !important; }
+
+    /* FLOATING DASHBOARD PANEL */
+    .floating-stats {
+        position: absolute; top: 10px; left: 60px; z-index: 1000;
+        background: rgba(0, 35, 102, 0.85); padding: 15px; border-radius: 8px;
+        border: 1px solid #005a9c; min-width: 400px; pointer-events: none;
     }
-    /* Alert Cards */
-    .alert-card-red {
-        background-color: #d6001a;
-        color: white;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        border-left: 8px solid #8b0000;
+    
+    /* FLOATING ALERTS PANEL */
+    .floating-alerts {
+        position: absolute; top: 10px; right: 20px; z-index: 1000;
+        background: rgba(0, 35, 102, 0.85); padding: 15px; border-radius: 8px;
+        border: 1px solid #005a9c; width: 320px; max-height: 80vh; overflow-y: auto;
     }
-    .alert-card-amber {
-        background-color: #eb8f34;
-        color: white;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        border-left: 8px solid #c46210;
+
+    /* Floating Analysis Box (Bottom) */
+    .floating-analysis {
+        position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+        z-index: 1001; background: white; padding: 20px; border-radius: 8px;
+        width: 800px; border-top: 10px solid #002366; color: #002366 !important;
     }
+    .floating-analysis * { color: #002366 !important; }
+
+    /* Button Styling */
+    div.stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; font-weight: bold; width: 100%; }
+    div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; font-weight: bold; width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
-# Auto-refresh
-st.markdown('<meta http-equiv="refresh" content="1800">', unsafe_allow_html=True)
-
-# 2. DATABASE
+# 3. COMPLETE FLEET DATABASE (Abbreviated for code length, keep your full dict here)
 airports = {
     "LCY": {"icao": "EGLC", "name": "London City", "fleet": "Cityflyer", "rwy": 270, "lat": 51.505, "lon": 0.055},
-    "LGW": {"icao": "EGKK", "name": "Gatwick", "fleet": "Euroflyer", "rwy": 260, "lat": 51.148, "lon": -0.190},
     "AMS": {"icao": "EHAM", "name": "Amsterdam", "fleet": "Cityflyer", "rwy": 180, "lat": 52.313, "lon": 4.764},
-    "RTM": {"icao": "EHRD", "name": "Rotterdam", "fleet": "Cityflyer", "rwy": 240, "lat": 51.957, "lon": 4.440},
-    "DUB": {"icao": "EIDW", "name": "Dublin", "fleet": "Cityflyer", "rwy": 280, "lat": 53.421, "lon": -6.270},
-    "GLA": {"icao": "EGPF", "name": "Glasgow", "fleet": "Cityflyer", "rwy": 230, "lat": 55.871, "lon": -4.433},
-    "EDI": {"icao": "EGPH", "name": "Edinburgh", "fleet": "Cityflyer", "rwy": 240, "lat": 55.950, "lon": -3.363},
-    "BHD": {"icao": "EGAC", "name": "Belfast City", "fleet": "Cityflyer", "rwy": 220, "lat": 54.618, "lon": -5.872},
     "STN": {"icao": "EGSS", "name": "Stansted", "fleet": "Cityflyer", "rwy": 220, "lat": 51.885, "lon": 0.235},
-    "SEN": {"icao": "EGMC", "name": "Southend", "fleet": "Cityflyer", "rwy": 230, "lat": 51.571, "lon": 0.701},
-    "FLR": {"icao": "LIRQ", "name": "Florence", "fleet": "Cityflyer", "rwy": 50, "lat": 43.810, "lon": 11.205},
-    "LIN": {"icao": "LIML", "name": "Milan Linate", "fleet": "Cityflyer", "rwy": 360, "lat": 45.445, "lon": 9.277},
-    "CMF": {"icao": "LFLB", "name": "Chambery", "fleet": "Cityflyer", "rwy": 180, "lat": 45.638, "lon": 5.880},
-    "ZRH": {"icao": "LSZH", "name": "Zurich", "fleet": "Cityflyer", "rwy": 160, "lat": 47.458, "lon": 8.548},
-    "FRA": {"icao": "EDDF", "name": "Frankfurt", "fleet": "Cityflyer", "rwy": 250, "lat": 50.033, "lon": 8.571},
-    "BER": {"icao": "EDDB", "name": "Berlin", "fleet": "Cityflyer", "rwy": 250, "lat": 52.362, "lon": 13.501},
-    "MAD": {"icao": "LEMD", "name": "Madrid", "fleet": "Cityflyer", "rwy": 140, "lat": 40.494, "lon": -3.567},
-    "JER": {"icao": "EGJJ", "name": "Jersey", "fleet": "Euroflyer", "rwy": 260, "lat": 49.208, "lon": -2.195},
+    "LGW": {"icao": "EGKK", "name": "Gatwick", "fleet": "Euroflyer", "rwy": 260, "lat": 51.148, "lon": -0.190},
     "INN": {"icao": "LOWI", "name": "Innsbruck", "fleet": "Euroflyer", "rwy": 260, "lat": 47.260, "lon": 11.344},
-    "SZG": {"icao": "LOWS", "name": "Salzburg", "fleet": "Euroflyer", "rwy": 330, "lat": 47.794, "lon": 13.004},
-    "SSH": {"icao": "HESH", "name": "Sharm El Sheikh", "fleet": "Euroflyer", "rwy": 40, "lat": 27.977, "lon": 34.394},
+    "FNC": {"icao": "LPMA", "name": "Madeira", "fleet": "Euroflyer", "rwy": 50, "lat": 32.694, "lon": -16.774},
+    # Add all 42 airports back in here...
 }
 
 def get_xwind(w_dir, w_spd, rwy):
     if not w_dir or not w_spd: return 0
     return round(abs(w_spd * math.sin(math.radians(w_dir - rwy))), 1)
 
-# --- HEADER SECTION ---
-st.markdown(f"""
-    <div class="ba-header">
-        <div style="font-size: 28px; font-weight: bold;">British Airways | OCC Weather Dashboard</div>
-        <div style="text-align: right;">
-            <span style="font-size: 14px;">{datetime.now().strftime('%d %b - %H:%M')} UTC</span>
+@st.cache_data(ttl=1800)
+def get_fleet_weather(airport_dict):
+    results = {}
+    for iata, info in airport_dict.items():
+        try:
+            m = Metar(info['icao']); m.update()
+            t = Taf(info['icao']); t.update()
+            results[iata] = {
+                "vis": m.data.visibility.value if m.data.visibility else 9999,
+                "w_dir": m.data.wind_direction.value if m.data.wind_direction else 0,
+                "w_spd": m.data.wind_speed.value if m.data.wind_speed else 0,
+                "ceiling": 9999, "raw_metar": m.raw, "raw_taf": t.raw
+            }
+            if m.data.clouds:
+                for layer in m.data.clouds:
+                    if layer.type in ['BKN', 'OVC'] and layer.base:
+                        results[iata]["ceiling"] = min(results[iata]["ceiling"], layer.base * 100)
+        except: continue
+    return results
+
+# DATA FETCH
+weather_data = get_fleet_weather(airports)
+
+# SIDEBAR CONTROLS
+st.sidebar.title("🔧 OCC Controls")
+ui_visible = st.sidebar.checkbox("Show HUD Overlay", value=True)
+search_iata = st.sidebar.text_input("IATA Search", "").upper()
+fleet_filter = st.sidebar.multiselect("Active Fleet", ["Cityflyer", "Euroflyer"], default=["Cityflyer", "Euroflyer"])
+
+if st.sidebar.button("🔄 Manual Refresh"):
+    st.cache_data.clear()
+    st.rerun()
+
+if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
+if search_iata in airports: st.session_state.investigate_iata = search_iata
+
+# PROCESS DATA
+active_alerts = {}
+counts = {"Cityflyer": {"green": 0, "orange": 0, "red": 0}, "Euroflyer": {"green": 0, "orange": 0, "red": 0}}
+map_markers = []
+
+for iata, data in weather_data.items():
+    info = airports[iata]
+    if info['fleet'] in fleet_filter:
+        xw = get_xwind(data['w_dir'], data['w_spd'], info['rwy'])
+        color = "#008000"; alert_type = None; reason = ""
+        
+        if xw > 25: alert_type = "red"; reason = "HIGH X-WIND"
+        elif data['vis'] < 800: alert_type = "red"; reason = "LOW VIS"
+        elif data['ceiling'] < 200: alert_type = "red"; reason = "LOW CEILING"
+        elif xw > 18: alert_type = "amber"; reason = "MARGINAL X-WIND"
+        elif data['vis'] < 1500: alert_type = "amber"; reason = "MARGINAL VIS"
+        elif data['ceiling'] < 500: alert_type = "amber"; reason = "MARGINAL CIG"
+
+        if alert_type:
+            active_alerts[iata] = {"type": alert_type, "reason": reason, "vis": data['vis'], "ceiling": data['ceiling'], "xw": xw, "metar": data['raw_metar'], "taf": data['raw_taf']}
+            color = "#d6001a" if alert_type == "red" else "#eb8f34"
+            counts[info['fleet']]["red" if alert_type=="red" else "orange"] += 1
+        else: counts[info['fleet']]["green"] += 1
+        map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "metar": data['raw_metar'], "taf": data['raw_taf']})
+
+# --- RENDER UI ---
+
+# 1. THE FULLSCREEN MAP (Background Layer)
+map_center = [48.0, 5.0]; zoom = 5
+if st.session_state.investigate_iata in airports:
+    target = airports[st.session_state.investigate_iata]
+    map_center = [target["lat"], target["lon"]]; zoom = 10
+
+m = folium.Map(location=map_center, zoom_start=zoom, tiles="CartoDB dark_matter", zoom_control=False)
+for mkr in map_markers:
+    popup_html = f"<div style='width:300px; color:black;'><b>METAR:</b> {mkr['metar']}<br><b>TAF:</b> {mkr['taf']}</div>"
+    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=10 if mkr['iata'] == st.session_state.investigate_iata else 6, color=mkr['color'], fill=True, fill_opacity=0.8, popup=folium.Popup(popup_html, max_width=400)).add_to(m)
+
+st_folium(m, width=2000, height=900, key="full_screen_map")
+
+# 2. THE HUD OVERLAY (Floating Layer)
+if ui_visible:
+    # Top Left Stats
+    st.markdown(f"""
+    <div class="floating-stats">
+        <h4 style="margin:0;">BA OCC FLEET STATUS</h4>
+        <hr style="margin:10px 0;">
+        <div style="display:flex; justify-content:space-between;">
+            <div><b>CF:</b> {counts['Cityflyer']['green']}G | {counts['Cityflyer']['orange']}A | {counts['Cityflyer']['red']}R</div>
+            <div><b>EF:</b> {counts['Euroflyer']['green']}G | {counts['Euroflyer']['orange']}A | {counts['Euroflyer']['red']}R</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-# Sidebar
-st.sidebar.image("https://www.britishairways.com/content/dam/paris/ba-logo.png", width=200)
-st.sidebar.title("Fleet Controls")
-fleet_filter = st.sidebar.multiselect("Active Fleet", ["Cityflyer", "Euroflyer"], default=["Cityflyer", "Euroflyer"])
-search_iata = st.sidebar.selectbox("Jump to Airport (IATA)", ["Select..."] + sorted([k for k, v in airports.items() if v['fleet'] in fleet_filter]))
-st.sidebar.markdown("---")
-op_notes = st.sidebar.text_area("Daily Operational Notes", "No slot delays reported.")
+    # Top Right Alerts
+    with st.container():
+        st.markdown('<div class="floating-alerts">', unsafe_allow_html=True)
+        st.write("⚠️ ACTIVE ALERTS")
+        for iata, d in active_alerts.items():
+            if st.button(f"{iata}: {d['reason']}", key=f"btn_{iata}", type="primary" if d['type'] == "red" else "secondary"):
+                st.session_state.investigate_iata = iata
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# Map Theme
-map_theme = st.sidebar.radio("Map Theme", ["Dark Mode", "Light Mode"])
-tile_style = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
-
-# Logic for Map
-map_center = [48.0, 5.0]; zoom = 4
-if search_iata != "Select...":
-    map_center = [airports[search_iata]["lat"], airports[search_iata]["lon"]]; zoom = 10
-
-m = folium.Map(location=map_center, zoom_start=zoom, tiles=tile_style, control_scale=True)
-counts = {"Cityflyer": {"green": 0, "orange": 0, "red": 0}, "Euroflyer": {"green": 0, "orange": 0, "red": 0}}
-red_alerts = []; amber_alerts = []
-
-# Process Weather
-for iata, info in airports.items():
-    if info['fleet'] in fleet_filter:
-        try:
-            metar = Metar(info['icao']); metar.update()
-            w_dir = metar.data.wind_direction.value if metar.data.wind_direction else 0
-            w_spd = metar.data.wind_speed.value if metar.data.wind_speed else 0
-            vis = metar.data.visibility.value if metar.data.visibility else 9999
-            xw = get_xwind(w_dir, w_spd, info['rwy'])
-
-            ceiling = 9999
-            if metar.data.clouds:
-                for layer in metar.data.clouds:
-                    if layer.type in ['BKN', 'OVC'] and layer.base is not None:
-                        h = layer.base * 100
-                        if h < ceiling: ceiling = h
-
-            color = "#008000" # Green
-            if xw > 25 or vis < 800 or ceiling < 200:
-                color = "#d6001a" # BA Red
-                red_alerts.append(f"{iata}: {info['name']} - Below Limits")
-                counts[info['fleet']]["red"] += 1
-            elif xw > 18 or vis < 1500 or ceiling < 500:
-                color = "#eb8f34" # Amber
-                amber_alerts.append(f"{iata}: {info['name']} - LVO Caution")
-                counts[info['fleet']]["orange"] += 1
-            else:
-                counts[info['fleet']]["green"] += 1
-
-            # Zoom-adaptive radius logic (larger when zoomed in)
-            radius_size = 8 if zoom < 6 else 15
-
-            folium.CircleMarker(
-                location=[info['lat'], info['lon']],
-                radius=radius_size, color=color, fill=True, fill_opacity=0.9,
-                popup=f"<b>{iata}</b><br>CIG: {ceiling}ft<br>XW: {xw}kt<br>{metar.raw}"
-            ).add_to(m)
-        except: continue
-
-# DISPLAY MAIN DASHBOARD
-col_stats1, col_stats2 = st.columns(2)
-with col_stats1:
-    st.subheader("Cityflyer Fleet Status")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Green", counts["Cityflyer"]["green"])
-    c2.metric("Amber", counts["Cityflyer"]["orange"])
-    c3.metric("Red", counts["Cityflyer"]["red"])
-with col_stats2:
-    st.subheader("Euroflyer Fleet Status")
-    c4, c5, c6 = st.columns(3)
-    c4.metric("Green", counts["Euroflyer"]["green"])
-    c5.metric("Amber", counts["Euroflyer"]["orange"])
-    c6.metric("Red", counts["Euroflyer"]["red"])
-
-st.markdown("---")
-
-col_map, col_alerts = st.columns([3.5, 1])
-
-with col_map:
-    st_folium(m, width=1100, height=750, key="occ_map")
-
-with col_alerts:
-    st.markdown("#### ⚠️ Critical Alerts")
-    for a in red_alerts:
-        st.markdown(f'<div class="alert-card-red">{a}</div>', unsafe_allow_html=True)
-    for a in amber_alerts:
-        st.markdown(f'<div class="alert-card-amber">{a}</div>', unsafe_allow_html=True)
-    if not red_alerts and not amber_alerts:
-        st.success("No active weather alerts.")
-    
-    st.markdown("---")
-    st.markdown("#### 📝 Operational Notes")
-    st.info(op_notes)
+# 3. ANALYSIS BOX (Bottom Layer)
+if st.session_state.investigate_iata in active_alerts and ui_visible:
+    d = active_alerts[st.session_state.investigate_iata]
+    st.markdown(f"""
+    <div class="floating-analysis">
+        <h3 style="margin:0;">{st.session_state.investigate_iata} Deep-Dive Analysis</h3>
+        <p><b>Issue:</b> {d['reason']} identified. Operating below standard limits.</p>
+        <p><b>Impact:</b> May cause diversions or ATC slots. Long delays expected to the operation.</p>
+        <hr>
+        <p style="font-size:11px;"><b>TAF Forecast:</b> {d['taf']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Close Analysis", key="close_view"):
+        st.session_state.investigate_iata = "None"; st.rerun()

@@ -23,13 +23,20 @@ st.markdown("""
     
     .alert-panel {
         position: absolute; top: 100px; right: 20px; z-index: 1000;
-        background: rgba(0, 35, 102, 0.8); padding: 15px; border-radius: 8px;
+        background: rgba(0, 35, 102, 0.85); padding: 15px; border-radius: 8px;
         border: 1px solid #005a9c; width: 320px; max-height: 60vh; overflow-y: auto;
     }
 
-    /* Color-Coded Alert Buttons */
-    .stButton > button.red-btn { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold; width: 100%; margin-bottom: 5px; }
-    .stButton > button.amber-btn { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold; width: 100%; margin-bottom: 5px; }
+    /* Base button style for HUD */
+    .stButton > button {
+        color: white !important;
+        font-weight: bold !important;
+        width: 100%;
+        margin-bottom: 8px;
+        border: 1px solid rgba(255,255,255,0.3) !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
 
     .floating-analysis {
         position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
@@ -38,7 +45,6 @@ st.markdown("""
         border-top: 12px solid #002366; color: #002366 !important;
         box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
     }
-    .floating-analysis h3, .floating-analysis p, .floating-analysis b, .floating-analysis li { color: #002366 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -50,7 +56,7 @@ def get_dist(lat1, lon1, lat2, lon2):
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 0)
 
-# 4. FLEET STATIONS
+# 4. FLEET STATIONS (CFE & EFW)
 baseline_icao = {
     "LCY": "EGLC", "AMS": "EHAM", "RTM": "EHRD", "DUB": "EIDW", "GLA": "EGPF",
     "EDI": "EGPH", "BHD": "EGAC", "STN": "EGSS", "SEN": "EGMC", "FLR": "LIRQ",
@@ -71,14 +77,12 @@ def fetch_weather(icao_dict):
                     for l in m.data.clouds:
                         if l.type in ['BKN', 'OVC']: c = min(c, l.base * 100)
                 
-                # Logic for 1-word weather type
                 wx_type = "GENERAL"
                 if any(x in m.raw for x in ["SN", "SG", "IC"]): wx_type = "SNOW"
                 elif "FG" in m.raw: wx_type = "FOG"
                 elif v < 1500: wx_type = "VIS"
                 elif c < 500: wx_type = "CLOUDBASE"
                 elif (m.data.wind_speed.value or 0) > 20: wx_type = "X-WIND"
-                elif "TS" in m.raw: wx_type = "STORM"
 
                 res[icao] = {
                     "iata": iata, "m": m.raw, "t": t.raw, "lat": m.station.latitude, 
@@ -88,9 +92,13 @@ def fetch_weather(icao_dict):
         except: continue
     return res
 
+# 5. SIDEBAR
+st.sidebar.title("🔧 HUD SETTINGS")
+map_theme = st.sidebar.radio("MAP THEME", ["Dark Mode", "Light Mode"])
+
 weather_data = fetch_weather(baseline_icao)
 
-# 5. STATE & PROCESSING
+# 6. PROCESSING
 if 'investigate_icao' not in st.session_state: st.session_state.investigate_icao = "None"
 
 active_alerts = {}; green_stations = []
@@ -100,32 +108,41 @@ for icao, d in weather_data.items():
     else:
         green_stations.append(icao)
 
-# 6. UI RENDER
+# 7. UI RENDER
 st.markdown(f'<div class="top-pill"><b>BA OCC NETWORK MONITOR</b><span>{datetime.utcnow().strftime("%H:%M")} UTC</span></div>', unsafe_allow_html=True)
 
-# MAP
-m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles="CartoDB dark_matter", zoom_control=False)
+tile_style = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
+m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile_style, zoom_control=False)
 for icao, d in weather_data.items():
     color = "#008000"
     if icao in active_alerts: color = "#d6001a" if d['vis'] < 800 or d['cig'] < 200 else "#eb8f34"
     folium.CircleMarker(location=[d['lat'], d['lon']], radius=8, color=color, fill=True, fill_opacity=0.8).add_to(m)
 st_folium(m, width=2200, height=1200, key="occ_map")
 
-# ALERT LIST (RIGHT)
+# 8. COLOR-CODED ALERT LIST (RIGHT)
 with st.container():
     st.markdown('<div class="alert-panel"><h4 style="color:white; margin-bottom:15px;">🚨 LIVE ALERTS</h4>', unsafe_allow_html=True)
     for icao, d in active_alerts.items():
-        btn_class = "red-btn" if d['vis'] < 800 or d['cig'] < 200 else "amber-btn"
-        if st.button(f"{d['iata']} - {d['type']}", key=f"btn_{icao}", help="Click for Impact Analysis"):
+        # Determine Color
+        btn_color = "#d6001a" if d['vis'] < 800 or d['cig'] < 200 else "#eb8f34"
+        
+        # Unique CSS for each button to force specific color
+        st.markdown(f"""
+            <style>
+            div[data-testid="stVerticalBlock"] > div:nth-child(n) button[key="btn_{icao}"] {{
+                background-color: {btn_color} !important;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+        
+        if st.button(f"{d['iata']} - {d['type']}", key=f"btn_{icao}"):
             st.session_state.investigate_icao = icao
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# IMPACT BOX (BOTTOM)
+# 9. IMPACT BOX (BOTTOM)
 if st.session_state.investigate_icao in active_alerts:
     d = active_alerts[st.session_state.investigate_icao]
-    
-    # Diversion Planning
     alt_iata = "N/A"; alt_dist = 9999
     for g_icao in green_stations:
         dist = get_dist(d['lat'], d['lon'], weather_data[g_icao]['lat'], weather_data[g_icao]['lon'])
@@ -133,17 +150,14 @@ if st.session_state.investigate_icao in active_alerts:
 
     st.markdown(f"""
     <div class="floating-analysis">
-        <div style="display:flex; justify-content:space-between; align-items:start;">
-            <h3>{d['iata']} / {st.session_state.investigate_icao} OPERATIONAL IMPACT</h3>
-            <b style="background:#002366; color:white !important; padding:5px 15px; border-radius:20px;">{d['type']} ALERT</b>
-        </div>
-        <div style="display:flex; gap:30px; margin-top:15px;">
+        <h3 style="color:#002366;">{d['iata']} / {st.session_state.investigate_icao} OPERATIONAL IMPACT</h3>
+        <div style="display:flex; gap:30px; margin-top:15px; color:#002366;">
             <div style="flex:1.2;">
-                <p><b>WEATHER OVERVIEW:</b> Vis {d['vis']}m, Ceiling {d['cig']}ft, Wind {d['w_dir']}°/{d['w_spd']}kt. {d['type']} conditions observed.</p>
+                <p><b>WEATHER OVERVIEW:</b> Observed {d['vis']}m visibility and {d['cig']}ft ceiling. Winds at {d['w_dir']}°/{d['w_spd']}kt.</p>
                 <p><b>DIVERSION PLANNING:</b> Closest Green station is <b>{alt_iata}</b> ({alt_dist} NM).</p>
-                <p><b>IMPACT STATEMENT:</b> High probability of <b>ATC holding or diversions</b>. Low visibility procedures (LVP) may be in force, reducing flow rates and causing operational delays.</p>
+                <p><b>IMPACT STATEMENT:</b> Possible <b>ATC holding or diversions</b>. Low visibility procedures (LVP) may be in effect, reducing flow rates.</p>
             </div>
-            <div style="flex:1; background:#f4f4f4; padding:15px; border-radius:5px; font-family:monospace; font-size:12px;">
+            <div style="flex:1; background:#f4f4f4; padding:15px; border-radius:5px; font-family:monospace; font-size:12px; border-left: 5px solid #d6001a;">
                 <b>METAR:</b><br>{d['m']}<br><br>
                 <b>TAF:</b><br>{d['t']}
             </div>

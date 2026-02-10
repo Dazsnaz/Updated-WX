@@ -6,7 +6,7 @@ import math
 from datetime import datetime
 
 # 1. PAGE SETUP
-st.set_page_config(layout="wide", page_title="BA OCC HUD - Full Fleet", page_icon="✈️")
+st.set_page_config(layout="wide", page_title="BA OCC HUD - Command", page_icon="✈️")
 
 # 2. CSS STYLING
 st.markdown("""
@@ -14,36 +14,52 @@ st.markdown("""
     .main .block-container { padding: 0; max-width: 100%; height: 100vh; overflow: hidden; }
     [data-testid="stSidebar"] { background-color: #002366 !important; }
     [data-testid="stSidebar"] label p { color: white !important; font-weight: bold; }
+    
+    /* TOP COMMAND PILL */
     .top-pill {
         position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
         z-index: 1001; background: rgba(0, 35, 102, 0.95); padding: 10px 30px;
-        border-radius: 50px; border: 2px solid #005a9c; min-width: 550px;
+        border-radius: 50px; border: 1px solid #005a9c; min-width: 550px;
         display: flex; justify-content: space-around; align-items: center; color: white;
     }
+    
+    /* ALERT LIST PANEL (RIGHT) */
     .alert-panel {
         position: absolute; top: 100px; right: 20px; z-index: 1000;
         background: rgba(0, 35, 102, 0.9); padding: 15px; border-radius: 8px;
-        border: 1px solid #005a9c; width: 450px; max-height: 60vh; overflow-y: auto; color: white;
+        border: 1px solid #005a9c; width: 320px; max-height: 60vh; overflow-y: auto;
     }
-    .wx-box { font-family: 'Courier New', monospace; font-size: 15px; margin-top: 8px; }
-    .metar-tag { color: #ff4b4b; font-weight: bold; }
-    .taf-tag { color: #3182bd; font-weight: bold; }
+
+    /* IMPACT ANALYSIS BOX (BOTTOM) */
+    .floating-analysis {
+        position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+        z-index: 1001; background: rgba(255, 255, 255, 0.98); padding: 25px; 
+        border-radius: 8px; width: 80%; max-width: 1100px; 
+        border-top: 10px solid #d6001a; color: #002366 !important;
+        box-shadow: 0px 10px 30px rgba(0,0,0,0.5);
+    }
+    .floating-analysis h3, .floating-analysis p, .floating-analysis b { color: #002366 !important; }
+    
+    /* BUTTON STYLING */
+    div.stButton > button { background-color: #d6001a !important; color: white !important; font-weight: bold; width: 100%; border: none; margin-bottom: 5px; }
+    div.stButton > button:hover { background-color: #eb8f34 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. FULL BASELINE FLEET (CFE & EFW)
+# 3. UTILITIES
+def get_dist(lat1, lon1, lat2, lon2):
+    R = 3440.065 # Nautical Miles
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi, dlambda = math.radians(lat2-lat1), math.radians(lon2-lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 0)
+
+# 4. FULL BASELINE FLEET
 baseline_icao = {
-    # --- CITYFLYER (CFE) ---
     "LCY": "EGLC", "AMS": "EHAM", "RTM": "EHRD", "DUB": "EIDW", "GLA": "EGPF",
     "EDI": "EGPH", "BHD": "EGAC", "STN": "EGSS", "SEN": "EGMC", "FLR": "LIRQ",
-    "AGP": "LEMG", "BER": "EDDB", "FRA": "EDDF", "LIN": "LIML", "CMF": "LFLB",
-    "GVA": "LSGG", "ZRH": "LSZH", "MAD": "LEMD", "IBZ": "LEIB", "PMI": "LEPA", "FAO": "LPFR",
-    # --- EUROFLYER (EFW) ---
-    "LGW": "EGKK", "JER": "EGJJ", "OPO": "LPPR", "LYS": "LFLL", "INN": "LOWI",
-    "SZG": "LOWS", "BOD": "LFBD", "GNB": "LFLS", "NCE": "LFMN", "TRN": "LIMF",
-    "VRN": "LIPX", "ALC": "LEAL", "SVQ": "LEZL", "RAK": "GMMX", "AGA": "GMAD",
-    "SSH": "HESH", "PFO": "LCPH", "LCA": "LCLK", "FUE": "GCLP", "TFS": "GCTS",
-    "ACE": "GCRR", "LPA": "GCLP", "IVL": "EFIV", "MLA": "LMML", "FNC": "LPMA"
+    "LGW": "EGKK", "JER": "EGJJ", "INN": "LOWI", "SZG": "LOWS", "NCE": "LFMN",
+    "PMI": "LEPA", "FNC": "LPMA", "IBZ": "LEIB", "AGP": "LEMG", "ALC": "LEAL"
 }
 
 @st.cache_data(ttl=600)
@@ -51,63 +67,69 @@ def fetch_weather(icao_dict):
     res = {}
     for iata, icao in icao_dict.items():
         try:
-            m = avwx.Metar(icao)
-            t = avwx.Taf(icao)
+            m = avwx.Metar(icao); t = avwx.Taf(icao)
             if m.update() and t.update():
-                res[icao] = {
-                    "iata": iata, "m": m.raw, "t": t.raw,
-                    "lat": m.station.latitude, "lon": m.station.longitude,
-                    "vis": m.data.visibility.value if m.data.visibility else 9999,
-                    "cig": 9999
-                }
+                v = m.data.visibility.value if m.data.visibility else 9999
+                c = 9999
                 if m.data.clouds:
                     for l in m.data.clouds:
-                        if l.type in ['BKN', 'OVC']: res[icao]["cig"] = min(res[icao]["cig"], l.base * 100)
+                        if l.type in ['BKN', 'OVC']: c = min(c, l.base * 100)
+                res[icao] = {"iata": iata, "m": m.raw, "t": t.raw, "lat": m.station.latitude, "lon": m.station.longitude, "vis": v, "cig": c}
         except: continue
     return res
 
-# 4. DATA FETCH
 weather_data = fetch_weather(baseline_icao)
 
-# 5. UI ELEMENTS
-st.markdown(f"""<div class="top-pill">
-    <b>CFE & EFW MONITOR: {len(weather_data)} STATIONS</b>
-    <span style="border-left:1px solid #555; padding-left:15px;">{datetime.utcnow().strftime('%H:%M')} UTC</span>
-</div>""", unsafe_allow_html=True)
+# 5. STATE & PROCESSING
+if 'investigate_icao' not in st.session_state: st.session_state.investigate_icao = "None"
 
-# 6. MAP LAYER
-m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles="CartoDB dark_matter", zoom_control=False)
-
-active_alerts = {}
+active_alerts = {}; green_stations = []
 for icao, d in weather_data.items():
-    color = "#008000" # Default Green
-    if d['vis'] < 800 or d['cig'] < 200: 
-        color = "#d6001a" # Red Alert
+    if d['vis'] < 1500 or d['cig'] < 500:
         active_alerts[icao] = d
-    elif d['vis'] < 1500 or d['cig'] < 500: 
-        color = "#eb8f34" # Amber Alert
-        active_alerts[icao] = d
+    else:
+        green_stations.append(icao)
 
-    folium.CircleMarker(
-        location=[d['lat'], d['lon']],
-        radius=8, color=color, fill=True, fill_opacity=0.8,
-        popup=folium.Popup(f"<b>{d['iata']} ({icao})</b><br>{d['m']}", max_width=350)
-    ).add_to(m)
+# 6. UI RENDER
+st.markdown(f"""<div class="top-pill"><b>NETWORK STATUS: {len(weather_data)} STATIONS</b><span style="border-left:1px solid #555; padding-left:15px;">{datetime.utcnow().strftime('%H:%M')} UTC</span></div>""", unsafe_allow_html=True)
 
-st_folium(m, width=2200, height=1200, key="occ_full_fleet")
+# MAP
+m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles="CartoDB dark_matter", zoom_control=False)
+for icao, d in weather_data.items():
+    color = "#008000"
+    if icao in active_alerts: color = "#d6001a" if d['vis'] < 800 else "#eb8f34"
+    folium.CircleMarker(location=[d['lat'], d['lon']], radius=8, color=color, fill=True, fill_opacity=0.8, popup=f"{d['iata']}: {d['m']}").add_to(m)
+st_folium(m, width=2200, height=1200, key="occ_map")
 
-# 7. ALERT OVERLAY (Right)
-if active_alerts:
-    with st.container():
-        st.markdown('<div class="alert-panel"><h4>🚨 OPERATIONAL ALERTS</h4>', unsafe_allow_html=True)
-        for icao, d in active_alerts.items():
-            st.markdown(f"""
-                <div style="border-bottom:1px solid #444; padding:12px 0;">
-                    <b style="color:#eb8f34; font-size:16px;">{d['iata']} / {icao}</b>
-                    <div class="wx-box">
-                        <span class="metar-tag">METAR:</span> {d['m']}<br><br>
-                        <span class="taf-tag">TAF:</span> {d['t']}
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+# ALERT LIST (RIGHT)
+with st.container():
+    st.markdown('<div class="alert-panel"><h4 style="color:white; margin-bottom:15px;">🚨 LIVE ALERTS</h4>', unsafe_allow_html=True)
+    for icao, d in active_alerts.items():
+        if st.button(f"🔍 {d['iata']} - {icao}", key=f"btn_{icao}"):
+            st.session_state.investigate_icao = icao
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# IMPACT BOX (BOTTOM)
+if st.session_state.investigate_icao in active_alerts:
+    d = active_alerts[st.session_state.investigate_icao]
+    
+    # Diversion Logic
+    alt_iata = "N/A"; alt_dist = 9999
+    for g_icao in green_stations:
+        dist = get_dist(d['lat'], d['lon'], weather_data[g_icao]['lat'], weather_data[g_icao]['lon'])
+        if dist < alt_dist: alt_dist = dist; alt_iata = weather_data[g_icao]['iata']
+
+    st.markdown(f"""
+    <div class="floating-analysis">
+        <h3>{d['iata']} IMPACT ANALYSIS</h3>
+        <p><b>DIVERSION PLANNING:</b> Closest Green station is <b>{alt_iata}</b> ({alt_dist} NM).</p>
+        <p><b>IMPACT:</b> Marginal conditions detected. Probability of <b>ATC holding or diversions</b> is HIGH. Expect operational delays.</p>
+        <hr style="border:0.5px solid #ddd;">
+        <div style="display:flex; gap:20px; font-family:monospace; font-size:13px;">
+            <div style="flex:1;"><b>METAR:</b><br>{d['m']}</div>
+            <div style="flex:1;"><b>TAF:</b><br>{d['t']}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("✖ CLOSE ANALYSIS", key="close_box"):
+        st.session_state.investigate_icao = "None"; st.rerun()

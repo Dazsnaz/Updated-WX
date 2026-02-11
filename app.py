@@ -138,7 +138,7 @@ def get_occ_intel(airport_dict):
                             if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
                     
                     reason = None
-                    # PRIORITY LOGIC
+                    # PRIORITY LOGIC: Closure > Minima > Convective > Wind
                     if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): reason = "CLOSED-FZRA"
                     elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
@@ -180,13 +180,17 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. MAP & ALERTS
+# 7. MAP & CLASSIFICATION
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
 for iata, info in all_stations.items():
     data = weather_intel.get(iata, {"status": "offline", "w_spd": 0, "w_gst": 0})
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
-    marker_color = "#008000"
+    
+    # DEFAULT COLOR IS GREY (OFFLINE)
+    marker_color = "#808080" 
+    
     if data['status'] == "online":
+        marker_color = "#008000" # GREEN (SAFE)
         m_res, m_severity = None, "secondary"
         if info['fleet'] == "Cityflyer" and ("FZRA" in data['raw_m'] or "FZDZ" in data['raw_m']):
             m_res = "CLOSED-FZRA"; marker_color = "#d6001a"; m_severity = "primary"
@@ -206,16 +210,19 @@ for iata, info in all_stations.items():
             taf_alerts[iata] = {"type": f['type'], "period": f['p'], "v": f['v'], "c": f['c'], "hex": f_severity}
             if marker_color == "#008000": marker_color = "#eb8f34"
 
-    # FIXED: Direct HTML for Popup Visibility
-    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data.get('raw_m', 'N/A'), "taf": data.get('raw_t', 'N/A')})
+    # POPUP CONTENT FIX
+    m_txt = data.get('raw_m', 'N/A')
+    t_txt = data.get('raw_t', 'N/A')
+    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": m_txt, "taf": t_txt})
 
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
-    popup_html = f"""<div style="font-family:monospace;font-size:11px;color:black;"><b>{mkr['iata']}</b><hr><b>METAR:</b> {mkr['metar']}<br><br><b>TAF:</b> {mkr['taf']}</div>"""
-    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_html, max_width=400)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v24")
+    # CLEAN POPUP
+    popup_text = f"{mkr['iata']}\n\nMETAR: {mkr['metar']}\n\nTAF: {mkr['taf']}"
+    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_text, parse_html=False, max_width=300)).add_to(m)
+st_folium(m, width=1400, height=400, key="map_v25")
 
 # 8. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)

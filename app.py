@@ -13,42 +13,17 @@ st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
     html, body, [class*="st-"], div, p, h1, h2, h3, h4, label { font-family: 'Inter', sans-serif !important; }
-    
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
-
-    .section-title { 
-        color: #002366 !important; 
-        font-weight: 800; 
-        font-size: 1.1rem; 
-        margin-top: 25px; 
-        margin-bottom: 10px;
-        border-bottom: 2px solid #d6001a; 
-        padding-bottom: 3px;
-        text-transform: uppercase;
-    }
+    .section-title { color: #002366 !important; font-weight: 800; font-size: 1.1rem; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #d6001a; padding-bottom: 3px; text-transform: uppercase; }
     
-    .stButton > button { 
-        color: white !important; 
-        border: 1px solid rgba(255,255,255,0.4) !important; 
-        text-transform: uppercase; 
-        font-size: 0.55rem !important; 
-        font-weight: 700 !important;
-        padding: 4px 2px !important;
-        line-height: 1.1 !important;
-        height: 55px !important; 
-        white-space: pre-wrap !important;
-        display: block !important;
-        width: 100% !important;
-        border-radius: 4px !important;
-    }
-    
+    /* ALERT TABS */
+    .stButton > button { color: white !important; border: 1px solid rgba(255,255,255,0.4) !important; text-transform: uppercase; font-size: 0.55rem !important; font-weight: 700 !important; padding: 4px 2px !important; line-height: 1.1 !important; height: 55px !important; white-space: pre-wrap !important; display: block !important; width: 100% !important; border-radius: 4px !important; }
     div.stButton > button[kind="primary"] { background-color: rgba(214, 0, 26, 0.9) !important; border: 1px solid #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: rgba(235, 143, 52, 0.9) !important; border: 1px solid #eb8f34 !important; }
-
-    .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d6001a; color: white !important; }
-    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-top: 20px; border-left: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     
+    .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d6001a; color: white !important; }
+    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-left: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; border: 1px solid #999 !important; font-family: monospace; }
     </style>
     """, unsafe_allow_html=True)
@@ -117,7 +92,7 @@ base_airports = {
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. DATA FETCH
+# 5. DATA FETCH & PRIORITY LOGIC
 if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
@@ -134,39 +109,45 @@ def get_occ_intel(airport_dict):
                     v, c = line.visibility.value if line.visibility else 9999, 9999
                     gust = line.wind_gust.value if line.wind_gust else 0
                     if line.clouds:
-                        for lyr in line.clouds:
-                            if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
+                        for layer in line.clouds:
+                            if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
+                    
                     reason = None
-                    if info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
+                    # Embraer Specific: Freezing Icing leads to Closure
+                    if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): 
+                        reason = "CLOSED-FZRA"
+                    elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: 
+                        reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
                     elif gust >= 35: reason = "GUST"
                     elif v < v_lim: reason = "VIS"
                     elif c < c_lim: reason = "CLOUD"
+                    
                     if reason:
-                        f_issue = {"type": reason, "v": v, "c": c, "g": gust, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
+                        f_issue = {"type": reason, "v": v, "c": c, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
                         break
+
             results[iata] = {
                 "vis": m.data.visibility.value if m.data.visibility else 9999,
                 "cig": 9999, "w_dir": m.data.wind_direction.value or 0, "w_spd": m.data.wind_speed.value or 0,
                 "w_gst": m.data.wind_gust.value or 0, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
             }
             if m.data.clouds:
-                for lyr in m.data.clouds:
-                    if lyr.type in ['BKN', 'OVC'] and lyr.base: results[iata]["cig"] = min(results[iata]["cig"], lyr.base * 100)
+                for layer in m.data.clouds:
+                    if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["cig"] = min(results[iata]["cig"], layer.base * 100)
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
     return results
 
 weather_intel = get_occ_intel({**base_airports, **st.session_state.manual_stations})
 
-# 6. UI RENDER
+# 6. UI & SIDEBAR
 with st.sidebar:
     st.title("🛠️ COMMAND SETTINGS")
     if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
     st.markdown("---")
     with st.form("manual_add"):
-        new_iata = st.text_input("IATA").upper()
-        new_icao = st.text_input("ICAO").upper()
+        new_iata, new_icao = st.text_input("IATA").upper(), st.text_input("ICAO").upper()
         if st.form_submit_button("Add Station"):
             try:
                 m = Metar(new_icao); m.update()
@@ -174,32 +155,40 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. MAP LOGIC
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
 for iata, info in {**base_airports, **st.session_state.manual_stations}.items():
     data = weather_intel.get(iata, {"status": "offline"})
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     marker_color = "#008000"
     if data['status'] == "online":
-        m_res = None
-        if data['vis'] < v_lim or data['cig'] < c_lim: m_res = "MINIMA"; marker_color = "#d6001a"
-        elif "TSRA" in data['raw_m']: m_res = "TSRA"; marker_color = "#eb8f34"
-        if m_res: metar_alerts[iata] = {"type": m_res, "hex": "primary" if marker_color=="#d6001a" else "secondary"}
+        m_res, m_severity = None, "secondary"
+        # Actual check for FZRA closure
+        if info['fleet'] == "Cityflyer" and ("FZRA" in data['raw_m'] or "FZDZ" in data['raw_m']):
+            m_res = "CLOSED-FZRA"; marker_color = "#d6001a"; m_severity = "primary"
+        elif data['vis'] < v_lim or data['cig'] < c_lim: 
+            m_res = "MINIMA"; marker_color = "#d6001a"; m_severity = "primary"
+        elif "TSRA" in data['raw_m']: 
+            m_res = "TSRA"; marker_color = "#eb8f34"
+        
+        if m_res: metar_alerts[iata] = {"type": m_res, "hex": m_severity}
         else: green_stations.append(iata)
+        
         if data['f']:
-            taf_alerts[iata] = {"type": data['f']['type'], "period": data['f']['p'], "v": data['f']['v'], "c": data['f']['c'], "hex": "primary" if data['f']['v'] < v_lim else "secondary"}
+            f = data['f']
+            f_severity = "primary" if f['type'] in ["CLOSED-FZRA", "MINIMA"] or f['v'] < v_lim else "secondary"
+            taf_alerts[iata] = {"type": f['type'], "period": f['p'], "v": f['v'], "c": f['c'], "hex": f_severity}
             if marker_color == "#008000": marker_color = "#eb8f34"
+
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
-    popup_html = f"<div style='color:black; width:400px; font-family:monospace;'><b>{mkr['iata']}</b><hr>METAR: {mkr['metar']}<br>TAF: {mkr['taf']}</div>"
-    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_html, max_width=500)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v18")
+    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(f"<div style='color:black; width:350px; font-family:monospace;'><b>{mkr['iata']}</b><hr>METAR: {mkr['metar']}</div>", max_width=400)).add_to(m)
+st_folium(m, width=1400, height=400, key="map_v20")
 
-# 8. ALERTS
+# 7. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(min(len(metar_alerts), 12))
@@ -214,40 +203,46 @@ if taf_alerts:
         with cols_t[i % 12]:
             if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"t_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 9. ANALYSIS
+# 8. STRATEGIC ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d = weather_intel.get(iata)
     all_stations = {**base_airports, **st.session_state.manual_stations}
     info = all_stations[iata]
     
-    # Crosswind Calculation Logic
+    main_issue = metar_alerts[iata]['type'] if iata in metar_alerts else taf_alerts[iata]['type']
+    period = "CURRENT" if iata in metar_alerts else taf_alerts[iata]['period']
+    
+    impact_stmt = "Operational limits breached. Verify aircraft icing/minima status."
+    if "CLOSED" in main_issue:
+        impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
+
     xw_msg = ""
     if d['w_spd'] > 20 or d['w_gst'] > 0:
         xw_comp = calculate_xwind(d['w_dir'], d['w_spd'], info['rwy'])
-        xw_gst = calculate_xwind(d['w_dir'], d['w_gst'], info['rwy']) if d['w_gst'] > 0 else 0
-        xw_msg = f" | X-WIND: {xw_comp}kt" + (f" (Gust {xw_gst}kt)" if xw_gst > 0 else "")
+        xw_msg = f" | X-WIND: {xw_comp}kt"
 
-    # Alternate logic
     alt_iata, min_dist = "None", 9999
     for g in green_stations:
         if g != iata:
-            dist = calculate_dist(all_stations[iata]['lat'], all_stations[iata]['lon'], all_stations[g]['lat'], all_stations[g]['lon'])
+            dist = calculate_dist(info['lat'], info['lon'], all_stations[g]['lat'], all_stations[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
 
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> {metar_alerts[iata]['type'] if iata in metar_alerts else taf_alerts[iata]['type']}{xw_msg} | Period: {"CURRENT" if iata in metar_alerts else taf_alerts[iata]['period']}</p>
-        <p><b>Impact Statement:</b> Operational limits breached. Check fleet crosswind limits.</p>
+        <p><b>Weather Summary:</b> {main_issue}{xw_msg} | Period: {period}</p>
+        <p><b>Impact Statement:</b> {impact_stmt}</p>
         <p style="color:#d6001a !important; font-weight:bold; font-size:1.1rem;">✈️ Nearest Safe Alternate: {alt_iata} ({min_dist} NM)</p>
         <hr><small><b>METAR:</b> {d['raw_m']}<br><b>TAF:</b> {d['raw_t']}</small>
     </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 10. HANDOVER
+# 9. HANDOVER
 st.markdown('<div class="section-title">📝 SHIFT HANDOVER SUMMARY</div>', unsafe_allow_html=True)
-h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
+h_txt = f"SHIFT HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
-    h_txt += f"{iata} {d['type']} ({d['period']}) - CAT3 Aircraft Advised\n"
+    advice = "CAT3 Aircraft Advised" if d['type'] == "CAT3-ONLY" else "Monitor alternate availability"
+    if "CLOSED" in d['type']: advice = "STATION CLOSED - EMBRAER LIMITS"
+    h_txt += f"{iata} {d['type']} ({d['period']}) - {advice}\n"
 st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")

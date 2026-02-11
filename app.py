@@ -11,13 +11,22 @@ st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="�
 # 2. REFINED HUD STYLING
 st.markdown("""
     <style>
-    /* SIDEBAR RESTORATION */
+    /* SIDEBAR */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     [data-testid="stSidebar"] label p { color: white !important; font-weight: bold; }
 
-    /* TITLE VISIBILITY FIX (NAVY ON DARK THEME OR DARK GRAY) */
-    .section-title { color: #ffffff !important; font-weight: 700; font-size: 1.2rem; margin-top: 20px; border-bottom: 1px solid #d6001a; padding-bottom: 5px; }
+    /* SECTION TITLES - FIXED VISIBILITY (NAVY) */
+    .section-title { 
+        color: #002366 !important; 
+        font-weight: 800; 
+        font-size: 1.1rem; 
+        margin-top: 25px; 
+        margin-bottom: 10px;
+        border-bottom: 2px solid #d6001a; 
+        padding-bottom: 3px;
+        text-transform: uppercase;
+    }
     
     /* MICRO-FONT TACTICAL BUTTONS */
     .stButton > button { 
@@ -39,11 +48,13 @@ st.markdown("""
     div.stButton > button[kind="primary"] { background-color: rgba(214, 0, 26, 0.8) !important; border: 1px solid #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: rgba(235, 143, 52, 0.8) !important; border: 1px solid #eb8f34 !important; }
 
-    .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d6001a; color: white !important; }
-    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; }
-    .reason-box h3, .reason-box p, .reason-box b { color: #002366 !important; }
+    .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d6001a; color: white !important; }
     
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; border: 1px solid #999 !important; }
+    /* READABLE BOXES */
+    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; }
+    .reason-box h3, .reason-box p, .reason-box b, .reason-box span { color: #002366 !important; }
+    
+    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; border: 1px solid #999 !important; font-family: monospace; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -58,11 +69,11 @@ def calculate_dist(lat1, lon1, lat2, lon2):
 # 4. MASTER DATABASE (FULL 46 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "spec": True},
-    "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "spec": False},
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "spec": False},
     "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "spec": True},
     "FNC": {"icao": "LPMA", "lat": 32.694, "lon": -16.774, "rwy": 50, "spec": True},
+    "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "spec": False},
     "EDI": {"icao": "EGPH", "lat": 55.950, "lon": -3.363, "rwy": 240, "spec": False},
     "GLA": {"icao": "EGPF", "lat": 55.871, "lon": -4.433, "rwy": 230, "spec": False},
     "BHD": {"icao": "EGAC", "lat": 54.618, "lon": -5.872, "rwy": 220, "spec": False},
@@ -71,11 +82,11 @@ base_airports = {
     "CMF": {"icao": "LFLB", "lat": 45.638, "lon": 5.880, "rwy": 180, "spec": True},
     "VRN": {"icao": "LIPX", "lat": 45.396, "lon": 10.888, "rwy": 40, "spec": False},
     "NCE": {"icao": "LFMN", "lat": 43.665, "lon": 7.215, "rwy": 40, "spec": False},
-    "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "spec": False},
     "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "spec": False},
+    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "spec": False},
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "spec": False},
-    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "spec": False},
+    "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "spec": False},
     "RTM": {"icao": "EHRD", "lat": 51.957, "lon": 4.440, "rwy": 240, "spec": False},
     "DUB": {"icao": "EIDW", "lat": 53.421, "lon": -6.270, "rwy": 280, "spec": False},
     "OPO": {"icao": "LPPR", "lat": 41.242, "lon": -8.678, "rwy": 350, "spec": False},
@@ -109,7 +120,7 @@ base_airports = {
 if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 6. SIDEBAR RESTORED
+# 6. SIDEBAR
 st.sidebar.title("🛠️ COMMAND SETTINGS")
 if st.sidebar.button("🔄 MANUAL DATA REFRESH"):
     st.cache_data.clear(); st.rerun()
@@ -158,7 +169,7 @@ def get_occ_intelligence(airport_dict):
             results[iata] = {
                 "vis": m.data.visibility.value if m.data.visibility else 9999,
                 "cig": 9999, "w_dir": m.data.wind_direction.value or 0, "w_spd": m.data.wind_speed.value or 0,
-                "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
+                "temp": m.data.temperature.value or 0, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
             }
             if m.data.clouds:
                 for layer in m.data.clouds:
@@ -177,16 +188,12 @@ for iata, info in all_airports.items():
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     xw = round(abs(data.get('w_spd', 0) * math.sin(math.radians(data.get('w_dir', 0) - info['rwy']))), 1) if info['rwy'] else 0
 
-    marker_color = "#008000" # DEFAULT GREEN
-    
+    marker_color = "#008000"
     if data['status'] == "online":
         m_reason = None
-        if data['vis'] < v_lim or data['cig'] < c_lim: 
-            m_reason = "MINIMA"; marker_color = "#d6001a"
-        elif xw > 25: 
-            m_reason = "XWIND"; marker_color = "#eb8f34"
-        elif "TSRA" in data['raw_m']: 
-            m_reason = "TSRA"; marker_color = "#eb8f34"
+        if data['vis'] < v_lim or data['cig'] < c_lim: m_reason = "MINIMA"; marker_color = "#d6001a"
+        elif xw > 25: m_reason = "XWIND"; marker_color = "#eb8f34"
+        elif "TSRA" in data['raw_m']: m_reason = "TSRA"; marker_color = "#eb8f34"
 
         if m_reason: metar_alerts[iata] = {"type": m_reason, "hex": "primary" if marker_color=="#d6001a" else "secondary"}
         else: green_stations.append(iata)
@@ -194,7 +201,7 @@ for iata, info in all_airports.items():
         if data['f']:
             f = data['f']
             taf_alerts[iata] = {"type": f['type'], "period": f['p'], "v": f['v'], "c": f['c'], "hex": "primary" if f['v'] < v_lim else "secondary"}
-            if marker_color == "#008000": marker_color = "#eb8f34" # Upgrade to Amber if Forecast issue exists
+            if marker_color == "#008000": marker_color = "#eb8f34"
 
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
@@ -206,9 +213,9 @@ m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles="CartoDB dark_matter")
 for mkr in map_markers:
     popup_html = f"<div style='color:black; width:400px; font-family:monospace;'><b>{mkr['iata']} Status</b><hr><b>METAR:</b> {mkr['metar']}<br><b>TAF:</b> {mkr['taf']}</div>"
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_html, max_width=500)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v10")
+st_folium(m, width=1400, height=400, key="map_v11")
 
-# 10. ALERT SECTIONS (TITLES FIXED)
+# 10. ALERTS SECTIONS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(10)
@@ -234,9 +241,9 @@ if st.session_state.investigate_iata != "None":
 
     st.markdown(f"""
     <div class="reason-box">
-        <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> Visibility {d['vis']}m, Ceiling {d['cig']}ft.</p>
-        <p><b>Impact Statement:</b> Disruption expected. Review fuel/alternate requirements.</p>
+        <h3>{iata} Strategic Analysis</h3>
+        <p><b>Weather Summary:</b> METAR reports {d['raw_m']}. Forecast Trend: {d['f']['type'] if d['f'] else 'Stable'}.</p>
+        <p><b>Impact Statement:</b> High risk of holding/diversions. Review crew/aircraft limits for the period.</p>
         <p style="color:#d6001a !important; font-weight:bold;">✈️ Strategic Alternate: {alt_iata} ({min_dist} NM)</p>
         <hr><small><b>METAR:</b> {d['raw_m']}<br><b>TAF:</b> {d['raw_t']}</small>
     </div>""", unsafe_allow_html=True)
@@ -244,7 +251,7 @@ if st.session_state.investigate_iata != "None":
 
 # 12. HANDOVER
 st.markdown('<div class="section-title">📝 SHIFT HANDOVER SUMMARY</div>', unsafe_allow_html=True)
-h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
+h_txt = f"SHIFT HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     h_txt += f"{iata} {d['type']} {d['v']}m/{d['c']}ft ({d['period']}) - CAT3 Aircraft Advised\n"
 st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")

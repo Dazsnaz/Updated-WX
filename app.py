@@ -17,7 +17,6 @@ st.markdown("""
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     .section-title { color: #002366 !important; font-weight: 800; font-size: 1.1rem; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #d6001a; padding-bottom: 3px; text-transform: uppercase; }
     
-    /* ALERT TABS */
     .stButton > button { color: white !important; border: 1px solid rgba(255,255,255,0.4) !important; text-transform: uppercase; font-size: 0.55rem !important; font-weight: 700 !important; padding: 4px 2px !important; line-height: 1.1 !important; height: 55px !important; white-space: pre-wrap !important; display: block !important; width: 100% !important; border-radius: 4px !important; }
     div.stButton > button[kind="primary"] { background-color: rgba(214, 0, 26, 0.9) !important; border: 1px solid #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: rgba(235, 143, 52, 0.9) !important; border: 1px solid #eb8f34 !important; }
@@ -41,7 +40,7 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. MASTER DATABASE (FULL 46 STATIONS)
+# 4. DATABASE (46 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -113,11 +112,8 @@ def get_occ_intel(airport_dict):
                             if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
                     
                     reason = None
-                    # Embraer Specific: Freezing Icing leads to Closure
-                    if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): 
-                        reason = "CLOSED-FZRA"
-                    elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: 
-                        reason = "CAT3-ONLY"
+                    if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): reason = "CLOSED-FZRA"
+                    elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
                     elif gust >= 35: reason = "GUST"
                     elif v < v_lim: reason = "VIS"
@@ -138,9 +134,10 @@ def get_occ_intel(airport_dict):
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
     return results
 
-weather_intel = get_occ_intel({**base_airports, **st.session_state.manual_stations})
+all_stations = {**base_airports, **st.session_state.manual_stations}
+weather_intel = get_occ_intel(all_stations)
 
-# 6. UI & SIDEBAR
+# 6. SIDEBAR
 with st.sidebar:
     st.title("🛠️ COMMAND SETTINGS")
     if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
@@ -156,13 +153,12 @@ with st.sidebar:
             except: st.error("Invalid ICAO")
 
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
-for iata, info in {**base_airports, **st.session_state.manual_stations}.items():
+for iata, info in all_stations.items():
     data = weather_intel.get(iata, {"status": "offline"})
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     marker_color = "#008000"
     if data['status'] == "online":
         m_res, m_severity = None, "secondary"
-        # Actual check for FZRA closure
         if info['fleet'] == "Cityflyer" and ("FZRA" in data['raw_m'] or "FZDZ" in data['raw_m']):
             m_res = "CLOSED-FZRA"; marker_color = "#d6001a"; m_severity = "primary"
         elif data['vis'] < v_lim or data['cig'] < c_lim: 
@@ -181,12 +177,13 @@ for iata, info in {**base_airports, **st.session_state.manual_stations}.items():
 
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
+# --- UI RENDER ---
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(f"<div style='color:black; width:350px; font-family:monospace;'><b>{mkr['iata']}</b><hr>METAR: {mkr['metar']}</div>", max_width=400)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v20")
+st_folium(m, width=1400, height=400, key="map_v21")
 
 # 7. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
@@ -203,18 +200,21 @@ if taf_alerts:
         with cols_t[i % 12]:
             if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"t_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 8. STRATEGIC ANALYSIS
+# 8. STRATEGIC ANALYSIS (CRASH PROTECTION APPLIED)
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
-    d = weather_intel.get(iata)
-    all_stations = {**base_airports, **st.session_state.manual_stations}
-    info = all_stations[iata]
+    d = weather_intel.get(iata, {"raw_m": "N/A", "raw_t": "N/A", "w_spd": 0, "w_gst": 0, "w_dir": 0})
+    info = all_stations.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     
-    main_issue = metar_alerts[iata]['type'] if iata in metar_alerts else taf_alerts[iata]['type']
-    period = "CURRENT" if iata in metar_alerts else taf_alerts[iata]['period']
+    # FIXED: Safe dictionary access to prevent KeyError
+    main_issue = metar_alerts.get(iata, {}).get('type')
+    if not main_issue:
+        main_issue = taf_alerts.get(iata, {}).get('type', "N/A")
+        
+    period = "CURRENT" if iata in metar_alerts else taf_alerts.get(iata, {}).get('period', "N/A")
     
     impact_stmt = "Operational limits breached. Verify aircraft icing/minima status."
-    if "CLOSED" in main_issue:
+    if main_issue and "CLOSED" in main_issue:
         impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
 
     xw_msg = ""
@@ -244,5 +244,5 @@ h_txt = f"SHIFT HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     advice = "CAT3 Aircraft Advised" if d['type'] == "CAT3-ONLY" else "Monitor alternate availability"
     if "CLOSED" in d['type']: advice = "STATION CLOSED - EMBRAER LIMITS"
-    h_txt += f"{iata} {d['type']} ({d['period']}) - {advice}\n"
+    h_txt += f"{iata} {d['type']} {d['v']}m/{d['c']}ft ({d['period']}) - {advice}\n"
 st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")

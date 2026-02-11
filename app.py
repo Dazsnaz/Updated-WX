@@ -91,7 +91,7 @@ base_airports = {
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. DATA FETCH & PRIORITY LOGIC
+# 5. DATA FETCH & LOGIC
 if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
@@ -105,7 +105,7 @@ def get_occ_intel(airport_dict):
             f_issue = None
             if t.data:
                 for line in t.data.forecast:
-                    v, c = line.visibility.value if line.visibility else 9999, 9999
+                    v, c = (line.visibility.value if line.visibility else 9999), 9999
                     gust = line.wind_gust.value if line.wind_gust else 0
                     if line.clouds:
                         for layer in line.clouds:
@@ -131,7 +131,7 @@ def get_occ_intel(airport_dict):
             if m.data.clouds:
                 for layer in m.data.clouds:
                     if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["cig"] = min(results[iata]["cig"], layer.base * 100)
-        except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
+        except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None, "w_spd": 0, "w_gst": 0, "w_dir": 0}
     return results
 
 all_stations = {**base_airports, **st.session_state.manual_stations}
@@ -154,7 +154,7 @@ with st.sidebar:
 
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
 for iata, info in all_stations.items():
-    data = weather_intel.get(iata, {"status": "offline"})
+    data = weather_intel.get(iata, {"status": "offline", "w_spd": 0, "w_gst": 0})
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     marker_color = "#008000"
     if data['status'] == "online":
@@ -177,7 +177,6 @@ for iata, info in all_stations.items():
 
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
-# --- UI RENDER ---
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
@@ -200,26 +199,28 @@ if taf_alerts:
         with cols_t[i % 12]:
             if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"t_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 8. STRATEGIC ANALYSIS (CRASH PROTECTION APPLIED)
+# 8. STRATEGIC ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
-    d = weather_intel.get(iata, {"raw_m": "N/A", "raw_t": "N/A", "w_spd": 0, "w_gst": 0, "w_dir": 0})
+    d = weather_intel.get(iata, {"w_spd": 0, "w_gst": 0, "w_dir": 0, "raw_m": "N/A", "raw_t": "N/A"})
     info = all_stations.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     
-    # FIXED: Safe dictionary access to prevent KeyError
+    # Safe Fetch to prevent KeyError
     main_issue = metar_alerts.get(iata, {}).get('type')
     if not main_issue:
         main_issue = taf_alerts.get(iata, {}).get('type', "N/A")
-        
     period = "CURRENT" if iata in metar_alerts else taf_alerts.get(iata, {}).get('period', "N/A")
     
-    impact_stmt = "Operational limits breached. Verify aircraft icing/minima status."
-    if main_issue and "CLOSED" in main_issue:
-        impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
+    impact_stmt = "Operational limits breached. Check aircraft/crew minima capability."
+    if main_issue and "CLOSED" in main_issue: impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limits."
 
+    # WIND DATA FAIL-SAFE
     xw_msg = ""
-    if d['w_spd'] > 20 or d['w_gst'] > 0:
-        xw_comp = calculate_xwind(d['w_dir'], d['w_spd'], info['rwy'])
+    w_spd = d.get('w_spd', 0)
+    w_gst = d.get('w_gst', 0)
+    w_dir = d.get('w_dir', 0)
+    if w_spd > 20 or w_gst > 0:
+        xw_comp = calculate_xwind(w_dir, w_spd, info.get('rwy', 0))
         xw_msg = f" | X-WIND: {xw_comp}kt"
 
     alt_iata, min_dist = "None", 9999
@@ -231,7 +232,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> {main_issue}{xw_msg} | Period: {period}</p>
+        <p><b>Weather Summary:</b> Issue: {main_issue}{xw_msg} | Period: {period}</p>
         <p><b>Impact Statement:</b> {impact_stmt}</p>
         <p style="color:#d6001a !important; font-weight:bold; font-size:1.1rem;">✈️ Nearest Safe Alternate: {alt_iata} ({min_dist} NM)</p>
         <hr><small><b>METAR:</b> {d['raw_m']}<br><b>TAF:</b> {d['raw_t']}</small>
@@ -244,5 +245,5 @@ h_txt = f"SHIFT HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     advice = "CAT3 Aircraft Advised" if d['type'] == "CAT3-ONLY" else "Monitor alternate availability"
     if "CLOSED" in d['type']: advice = "STATION CLOSED - EMBRAER LIMITS"
-    h_txt += f"{iata} {d['type']} {d['v']}m/{d['c']}ft ({d['period']}) - {advice}\n"
+    h_txt += f"{iata} {d['type']} ({d['period']}) - {advice}\n"
 st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")

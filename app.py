@@ -16,12 +16,27 @@ st.markdown("""
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; font-family: 'Courier New', monospace; }
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
-    .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; width: 100%; text-transform: uppercase; font-size: 0.52rem !important; height: 60px !important; line-height: 1.1 !important; white-space: pre-wrap !important; display: flex; align-items: center; justify-content: center; text-align: center; }
+    
+    .stButton > button { 
+        background-color: #005a9c !important; 
+        color: white !important; 
+        border: 1px solid white !important; 
+        width: 100%; 
+        text-transform: uppercase; 
+        font-size: 0.52rem !important; 
+        height: 60px !important; 
+        line-height: 1.1 !important; 
+        white-space: pre-wrap !important; 
+        display: flex; align-items: center; justify-content: center; text-align: center;
+    }
+    
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
+    
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
+    
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     </style>
@@ -42,9 +57,9 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
 
 # 4. MASTER DATABASE (FULL 46 STATIONS)
 base_airports = {
-    # Cityflyer
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
+    "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "fleet": "Cityflyer", "spec": False},
     "EDI": {"icao": "EGPH", "lat": 55.950, "lon": -3.363, "rwy": 240, "fleet": "Cityflyer", "spec": False},
     "GLA": {"icao": "EGPF", "lat": 55.871, "lon": -4.433, "rwy": 230, "fleet": "Cityflyer", "spec": False},
     "BHD": {"icao": "EGAC", "lat": 54.618, "lon": -5.872, "rwy": 220, "fleet": "Cityflyer", "spec": False},
@@ -58,14 +73,11 @@ base_airports = {
     "BER": {"icao": "EDDB", "lat": 52.362, "lon": 13.501, "rwy": 250, "fleet": "Cityflyer", "spec": False},
     "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.571, "rwy": 250, "fleet": "Cityflyer", "spec": False},
     "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.277, "rwy": 360, "fleet": "Cityflyer", "spec": False},
-    "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "fleet": "Cityflyer", "spec": False},
     "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
     "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False},
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
     "SEN": {"icao": "EGMC", "lat": 51.571, "lon": 0.701, "rwy": 230, "fleet": "Cityflyer", "spec": False},
-    
-    # Euroflyer
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
@@ -111,9 +123,8 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. DATA FETCH & TAF MULTI-HAZARD SCAN
+# 7. DATA FETCH
 all_raw = {**base_airports, **st.session_state.manual_stations}
-all_stations = {k: v for k, v in all_raw.items() if (v['fleet'] == "Cityflyer" and show_cf) or (v['fleet'] == "Euroflyer" and show_ef) or (v['fleet'] == "Ad-Hoc")}
 
 @st.cache_data(ttl=600)
 def get_intel(airport_dict):
@@ -146,12 +157,16 @@ def get_intel(airport_dict):
         except: res[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
     return res
 
-weather_data = get_intel(all_stations)
+weather_data = get_intel(all_raw)
 
-# 8. ALERT PROCESSING
+# 8. FILTER & ALERT PROCESSING
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, data in weather_data.items():
-    info = all_stations[iata]
+    info = all_raw[iata]
+    # Apply Fleet Filter here
+    if not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef) or (info['fleet'] == "Ad-Hoc")):
+        continue
+        
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     color = "#008000"
     if data['status'] == "online":
@@ -161,21 +176,24 @@ for iata, data in weather_data.items():
         elif data['vis'] < v_lim or data['cig'] < c_lim: m_issues.append("MINIMA"); color = "#d6001a"
         elif data['vis'] < (v_lim * 2) or data['cig'] < (c_lim * 2): m_issues.append("MARGINAL"); color = "#eb8f34"
         if xw > 25: m_issues.append("X-WIND"); color = "#eb8f34"
+        
         if m_issues: metar_alerts[iata] = {"type": " / ".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
         else: green_stations.append(iata)
+        
         if data['f_issues']:
             t_hex = "primary" if any(x in str(data['f_issues']) for x in ["Minima", "Closed"]) else "secondary"
             taf_alerts[iata] = {"type": " + ".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": t_hex}
             if color == "#008000": color = "#eb8f34"
-    pop_html = f"""<div style="width:500px; color:black !important; font-family:monospace; font-size:12px;"><b style="color:#002366;">{iata} STATION DATA</b><hr><div style="display:flex; gap:10px;"><div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>METAR</b><br>{data['raw_m']}</div><div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>TAF</b><br>{data['raw_t']}</div></div></div>"""
-    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": pop_html})
+    
+    popup_html = f"""<div style="width:500px; color:black !important; font-family:monospace; font-size:12px;"><b style="color:#002366;">{iata} STATION DATA</b><hr><div style="display:flex; gap:10px;"><div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>METAR</b><br>{data['raw_m']}</div><div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>TAF</b><br>{data['raw_t']}</div></div></div>"""
+    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # --- UI RENDER ---
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=600)).add_to(m)
-st_folium(m, width=800, height=800, key="map_v40")
+st_folium(m, width=800, height=800, key="map_v41")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -204,7 +222,7 @@ if st.session_state.investigate_iata != "None":
         if g != iata:
             dist = calculate_dist(info['lat'], info['lon'], all_raw[g]['lat'], all_raw[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>Weather Summary:</b> Multi-hazard detected. Live crosswind: <b>{xw_val}kt</b> for RWY {info['rwy']}°.</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{d.get('raw_m')}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{d.get('raw_t')}</small></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>Weather Summary:</b> Hazards detected. Live crosswind: <b>{xw_val}kt</b> for RWY {info['rwy']}°.</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{d.get('raw_m')}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{d.get('raw_t')}</small></div></div></div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)

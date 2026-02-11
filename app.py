@@ -148,7 +148,7 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. DATA FETCH (V1.0 Logic + Multi-Hazard Deep Scan)
+# 7. DATA FETCH
 all_stations = {**base_airports, **st.session_state.manual_stations}
 
 @st.cache_data(ttl=600)
@@ -242,13 +242,23 @@ for iata, data in weather_data.items():
 
 # --- UI RENDER ---
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+
+# 9. SQUARE MAP (SCROLL ZOOM DISABLED)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
-m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=tile)
+# Center on Europe: 50.0, 10.0
+m = folium.Map(
+    location=[50.0, 10.0], 
+    zoom_start=4, 
+    tiles=tile,
+    scrollWheelZoom=False  # CRITICAL FIX: Disable scroll-to-zoom
+)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=600)).add_to(m)
-st_folium(m, width=800, height=800, key="map_v37")
 
-# 10. ALERT ROWS
+# Square aspect ratio: 800x800
+st_folium(m, width=800, height=800, key="map_v38")
+
+# 10. ALIGNMENT ALERT ROWS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(10)
@@ -274,7 +284,6 @@ if st.session_state.investigate_iata != "None":
     
     issue_desc = f_alert.get('type') if f_alert else m_alert.get('type', "STABLE")
     period = f_alert.get('time', "CURRENT")
-    
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     
     alt_iata, min_dist = "None", 9999

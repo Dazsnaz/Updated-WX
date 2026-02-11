@@ -116,7 +116,7 @@ base_airports = {
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. DATA FETCH
+# 5. DATA FETCH & PRIORITY LOGIC
 if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
@@ -134,10 +134,11 @@ def get_occ_intel(airport_dict):
                     v, c = (line.visibility.value if line.visibility else 9999), 9999
                     gust = line.wind_gust.value if line.wind_gust else 0
                     if line.clouds:
-                        for lyr in line.clouds:
-                            if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
+                        for layer in line.clouds:
+                            if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
                     
                     reason = None
+                    # PRIORITY LOGIC
                     if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): reason = "CLOSED-FZRA"
                     elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
@@ -156,8 +157,8 @@ def get_occ_intel(airport_dict):
                 "w_gst": m.data.wind_gust.value or 0, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
             }
             if m.data.clouds:
-                for lyr in m.data.clouds:
-                    if lyr.type in ['BKN', 'OVC'] and lyr.base: results[iata]["cig"] = min(results[iata]["cig"], lyr.base * 100)
+                for layer in m.data.clouds:
+                    if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["cig"] = min(results[iata]["cig"], layer.base * 100)
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None, "w_spd": 0, "w_gst": 0, "w_dir": 0}
     return results
 
@@ -179,7 +180,7 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. CLASSIFICATION & MAP LOGIC
+# 7. MAP & ALERTS
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
 for iata, info in all_stations.items():
     data = weather_intel.get(iata, {"status": "offline", "w_spd": 0, "w_gst": 0})
@@ -205,17 +206,16 @@ for iata, info in all_stations.items():
             taf_alerts[iata] = {"type": f['type'], "period": f['p'], "v": f['v'], "c": f['c'], "hex": f_severity}
             if marker_color == "#008000": marker_color = "#eb8f34"
 
+    # FIXED: Direct HTML for Popup Visibility
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data.get('raw_m', 'N/A'), "taf": data.get('raw_t', 'N/A')})
 
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
-    # FIXED: HTML IFrame for reliable data display
-    html = f"""<div style="font-family:monospace;font-size:11px;"><b>{mkr['iata']}</b><hr><b>METAR:</b> {mkr['metar']}<br><br><b>TAF:</b> {mkr['taf']}</div>"""
-    iframe = folium.IFrame(html, width=320, height=200)
-    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(iframe, max_width=350)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v23")
+    popup_html = f"""<div style="font-family:monospace;font-size:11px;color:black;"><b>{mkr['iata']}</b><hr><b>METAR:</b> {mkr['metar']}<br><br><b>TAF:</b> {mkr['taf']}</div>"""
+    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_html, max_width=400)).add_to(m)
+st_folium(m, width=1400, height=400, key="map_v24")
 
 # 8. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
@@ -238,13 +238,12 @@ if st.session_state.investigate_iata != "None":
     d = weather_intel.get(iata, {"w_spd": 0, "w_gst": 0, "w_dir": 0, "raw_m": "N/A", "raw_t": "N/A"})
     info = all_stations.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     
-    # Safe Fetch
-    main_issue = metar_alerts.get(iata, {}).get('type')
-    if not main_issue: main_issue = taf_alerts.get(iata, {}).get('type', "N/A")
+    main_issue = metar_alerts.get(iata, {}).get('type') or taf_alerts.get(iata, {}).get('type', "N/A")
     period = "CURRENT" if iata in metar_alerts else taf_alerts.get(iata, {}).get('period', "N/A")
     
     impact_stmt = "Operational limits breached. Verify aircraft/crew capability."
-    if main_issue and "CLOSED" in main_issue: impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
+    if "CLOSED" in main_issue: impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
+    if "CAT3" in main_issue: impact_stmt = "LVP Operations. CAT3 Capable aircraft/crew only."
 
     xw_msg = ""
     w_spd, w_gst, w_dir = d.get('w_spd', 0), d.get('w_gst', 0), d.get('w_dir', 0)
@@ -261,7 +260,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> {main_issue}{xw_msg} | Period: {period}</p>
+        <p><b>Weather Summary:</b> Issue: {main_issue}{xw_msg} | Period: {period}</p>
         <p><b>Impact Statement:</b> {impact_stmt}</p>
         <p style="color:#d6001a !important; font-weight:bold; font-size:1.1rem;">✈️ Nearest Safe Alternate: {alt_iata} ({min_dist} NM)</p>
         <hr><small><b>METAR:</b> {d['raw_m']}<br><b>TAF:</b> {d['raw_t']}</small>

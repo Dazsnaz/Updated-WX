@@ -32,7 +32,7 @@ def calculate_dist(lat1, lon1, lat2, lon2):
     R = 3440.065 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*phi2*math.sin(dlambda/2)**2
     return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 1)
 
 def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
@@ -40,7 +40,7 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. MASTER DATABASE (STABLE 46 STATIONS)
+# 4. MASTER DATABASE (FULL 46 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -155,15 +155,12 @@ def get_intel_stable(airport_dict):
         except: res[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
     return res
 
-# Always run the engine on the full 46 master list to prevent toggling reloads
 weather_data = get_intel_stable(all_raw)
 
 # 8. INSTANT UI FILTERING
 metar_alerts = {}; taf_alerts = {}; green_stations = []; map_markers = []
 for iata, data in weather_data.items():
     info = all_raw[iata]
-    
-    # Instant toggle logic: Skip rendering if unchecked, but keep the data in memory
     if not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef) or (info['fleet'] == "Ad-Hoc")):
         continue
 
@@ -192,10 +189,14 @@ for iata, data in weather_data.items():
 
 # --- UI RENDER ---
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+
+# 9. SQUARE MAP (SCROLL ZOOM OFF + NEW SIZE 1200x1200)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=600)).add_to(m)
-st_folium(m, width=800, height=800, key="map_v39_final")
+
+# UPDATED TO 1200x1200px
+st_folium(m, width=1200, height=1200, key="map_v39_final")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -224,7 +225,7 @@ if st.session_state.investigate_iata != "None":
         if g != iata:
             dist = calculate_dist(info['lat'], info['lon'], all_raw[g]['lat'], all_raw[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>Weather Summary:</b> {issue_desc} detected. Live crosswind: <b>{xw_val}kt</b> (RWY {info['rwy']}°).</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR</b><br><small>{d.get('raw_m')}</small></div><div style="flex:1;"><b>TAF</b><br><small>{d.get('raw_t')}</small></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>Weather Summary:</b> {issue_desc} detected. Live crosswind: <b>{xw_val}kt</b> (RWY {info['rwy']}°).</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{d.get('raw_m')}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{d.get('raw_t')}</small></div></div></div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
 # 12. HANDOVER

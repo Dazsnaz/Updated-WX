@@ -41,6 +41,10 @@ st.markdown("""
     
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
+    
+    /* LIMITS TABLE STYLE */
+    .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
+    .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -57,7 +61,7 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. MASTER DATABASE (FULL 46 STATIONS)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -118,6 +122,18 @@ with st.sidebar:
     if st.button("🔄 MANUAL DATA REFRESH"):
         st.cache_data.clear(); st.rerun()
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
+    
+    st.markdown("---")
+    st.markdown("📊 **FLEET X-WIND LIMITS**")
+    st.markdown("""
+    <table class="limits-table">
+        <tr><th>FLEET</th><th>DRY</th><th>WET</th></tr>
+        <tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr>
+        <tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr>
+        <tr><td><b>ATR-72</b></td><td>27 kt</td><td>27 kt</td></tr>
+    </table>
+    """, unsafe_allow_html=True)
+    
     st.markdown("---")
     with st.form("manual_add", clear_on_submit=True):
         new_iata, new_icao = st.text_input("IATA").upper(), st.text_input("ICAO").upper()
@@ -128,7 +144,7 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. DATA FETCH (V1.0 Logic + Deep Scan)
+# 7. DATA FETCH
 all_stations = {**base_airports, **st.session_state.manual_stations}
 
 @st.cache_data(ttl=600)
@@ -225,7 +241,7 @@ for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=600)).add_to(m)
 st_folium(m, width=800, height=800, key="map_v35")
 
-# 10. STRAIGHT ALIGNMENT ALERT ROWS
+# 10. ALIGNMENT ALERT ROWS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(10)
@@ -241,14 +257,14 @@ if taf_alerts:
             p_tag = "\nPROB40" if d['prob'] else ""
             if st.button(f"{iata}\n{d['time']}\n{d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS
+# 11. STRATEGIC ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d = weather_data.get(iata, {})
     info = all_stations.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
-    
     m_alert = metar_alerts.get(iata, {})
     f_alert = taf_alerts.get(iata, {})
+    
     issue = f_alert.get('type') if f_alert else m_alert.get('type', "STABLE")
     period = f_alert.get('time', "CURRENT")
     
@@ -267,7 +283,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief: {issue}</h3>
-        <p><b>Weather Summary:</b> Issue detected for {period} window. X-Wind: {xw_val}kt (RWY {info['rwy']}°).</p>
+        <p><b>Weather Summary:</b> {issue} detected for {period} window. Live X-Wind: {xw_val}kt (RWY {info['rwy']}°).</p>
         <p><b>Impact Statement:</b> {impact}</p>
         <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
         <hr>
@@ -283,4 +299,4 @@ st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     h_txt += f"{iata}: {d['type']} ({d['time']}){' - PROB40' if d['prob'] else ''}\n"
-st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")
+st.text_area("Copy Handover:", value=h_txt, height=150, label_visibility="collapsed")

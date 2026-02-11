@@ -31,18 +31,18 @@ st.markdown("""
         text-transform: uppercase;
     }
     
-    /* ADAPTIVE HORIZONTAL BUTTONS */
+    /* HORIZONTAL ALERT TABS */
     .stButton > button { 
         color: white !important; 
         border: 1px solid rgba(255,255,255,0.4) !important; 
         text-transform: uppercase; 
-        font-size: 0.58rem !important; 
+        font-size: 0.55rem !important; 
         font-weight: 700 !important;
-        padding: 4px 6px !important;
+        padding: 4px 2px !important;
         line-height: 1.1 !important;
-        height: 50px !important; 
+        height: 55px !important; 
         white-space: pre-wrap !important;
-        display: inline-block !important;
+        display: block !important;
         width: 100% !important;
         border-radius: 4px !important;
     }
@@ -51,7 +51,7 @@ st.markdown("""
     div.stButton > button[kind="secondary"] { background-color: rgba(235, 143, 52, 0.9) !important; border: 1px solid #eb8f34 !important; }
 
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d6001a; color: white !important; }
-    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-top: 20px; border-left: 10px solid #d6001a; color: #002366 !important; }
+    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-top: 20px; border-left: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; border: 1px solid #999 !important; font-family: monospace; }
     </style>
@@ -59,7 +59,7 @@ st.markdown("""
 
 # 3. UTILITIES
 def calculate_dist(lat1, lon1, lat2, lon2):
-    R = 3440.065 
+    R = 3440.065 # Nautical Miles
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
@@ -140,7 +140,7 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. DATA FETCH
+# 7. DATA FETCH & LOGIC
 all_airports = {**base_airports, **st.session_state.manual_stations}
 
 @st.cache_data(ttl=600)
@@ -159,19 +159,21 @@ def get_occ_intel(airport_dict):
                     if line.clouds:
                         for lyr in line.clouds:
                             if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
+                    
                     reason = None
                     if info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
                     elif gust >= 35: reason = "GUST"
                     elif v < v_lim: reason = "VIS"
                     elif c < c_lim: reason = "CLOUD"
+                    
                     if reason:
                         f_issue = {"type": reason, "v": v, "c": c, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
                         break
             results[iata] = {"vis": m.data.visibility.value if m.data.visibility else 9999, "cig": 9999, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue}
             if m.data.clouds:
-                for lyr in m.data.clouds:
-                    if lyr.type in ['BKN', 'OVC'] and lyr.base: results[iata]["cig"] = min(results[iata]["cig"], lyr.base * 100)
+                for layer in m.data.clouds:
+                    if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["cig"] = min(results[iata]["cig"], layer.base * 100)
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
     return results
 
@@ -191,7 +193,7 @@ for iata, info in all_airports.items():
         else: green_stations.append(iata)
         if data['f']:
             f = data['f']
-            taf_alerts[iata] = {"type": f['type'], "period": f['p'], "hex": "primary" if f['v'] < v_lim else "secondary"}
+            taf_alerts[iata] = {"type": f['type'], "period": f['p'], "v": f['v'], "c": f['c'], "hex": "primary" if f['v'] < v_lim else "secondary"}
             if marker_color == "#008000": marker_color = "#eb8f34"
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
@@ -202,14 +204,13 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
-    popup_html = f"<div style='color:black; width:400px; font-family:monospace;'><b>{mkr['iata']}</b><hr><b>METAR:</b> {mkr['metar']}<br><b>TAF:</b> {mkr['taf']}</div>"
+    popup_html = f"<div style='color:black; width:400px; font-family:monospace;'><b>{mkr['iata']} Status</b><hr><b>METAR:</b> {mkr['metar']}<br><b>TAF:</b> {mkr['taf']}</div>"
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(popup_html, max_width=500)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v16")
+st_folium(m, width=1400, height=400, key="map_v17")
 
-# 10. HORIZONTAL ALERT ROWS
+# 10. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
-    # Logic: Dynamic Columns to force horizontal layout
     cols = st.columns(min(len(metar_alerts), 12))
     for i, (iata, d) in enumerate(metar_alerts.items()):
         with cols[i % 12]:
@@ -222,30 +223,37 @@ if taf_alerts:
         with cols_t[i % 12]:
             if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"t_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS
+# 11. STRATEGIC ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d = weather_intel.get(iata)
     issue = metar_alerts[iata]['type'] if iata in metar_alerts else (taf_alerts[iata]['type'] if iata in taf_alerts else "N/A")
     period = "CURRENT" if iata in metar_alerts else (taf_alerts[iata]['period'] if iata in taf_alerts else "N/A")
+    
+    # IMPROVED DIVERSION LOGIC: Exclude self and look for Green
     alt_iata, min_dist = "None", 9999
+    all_stations = {**base_airports, **st.session_state.manual_stations}
+    
     for g in green_stations:
-        dist = calculate_dist(all_airports[iata]['lat'], all_airports[iata]['lon'], all_airports[g]['lat'], all_airports[g]['lon'])
-        if dist < min_dist: min_dist = dist; alt_iata = g
+        if g != iata: # EXCLUDE SELF
+            dist = calculate_dist(all_stations[iata]['lat'], all_stations[iata]['lon'], all_stations[g]['lat'], all_stations[g]['lon'])
+            if dist < min_dist:
+                min_dist = dist
+                alt_iata = g
 
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief</h3>
         <p><b>Weather Summary:</b> Issue: {issue} | Period: {period}</p>
-        <p><b>Impact Statement:</b> Disruption expected. Review aircraft capability and alternate fuel requirements.</p>
-        <p style="color:#d6001a !important; font-weight:bold;">✈️ Strategic Alternate: {alt_iata} ({min_dist} NM)</p>
+        <p><b>Impact Statement:</b> Operational disruption expected. Review aircraft capability and fuel reserves.</p>
+        <p style="color:#d6001a !important; font-weight:bold; font-size:1.1rem;">✈️ Nearest Safe Alternate: {alt_iata} ({min_dist} NM)</p>
         <hr><small><b>METAR:</b> {d['raw_m']}<br><b>TAF:</b> {d['raw_t']}</small>
     </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
 # 12. HANDOVER
 st.markdown('<div class="section-title">📝 SHIFT HANDOVER SUMMARY</div>', unsafe_allow_html=True)
-h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
+h_txt = f"SHIFT HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     h_txt += f"{iata} {d['type']} ({d['period']}) - CAT3 Aircraft Advised\n"
 st.text_area("Handover Report Copy:", value=h_txt, height=150, label_visibility="collapsed")

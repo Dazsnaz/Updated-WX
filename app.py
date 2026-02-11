@@ -16,11 +16,9 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     .section-title { color: #002366 !important; font-weight: 800; font-size: 1.1rem; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #d6001a; padding-bottom: 3px; text-transform: uppercase; }
-    
     .stButton > button { color: white !important; border: 1px solid rgba(255,255,255,0.4) !important; text-transform: uppercase; font-size: 0.55rem !important; font-weight: 700 !important; padding: 4px 2px !important; line-height: 1.1 !important; height: 55px !important; white-space: pre-wrap !important; display: block !important; width: 100% !important; border-radius: 4px !important; }
     div.stButton > button[kind="primary"] { background-color: rgba(214, 0, 26, 0.9) !important; border: 1px solid #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: rgba(235, 143, 52, 0.9) !important; border: 1px solid #eb8f34 !important; }
-    
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #d6001a; color: white !important; }
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-left: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; border: 1px solid #999 !important; font-family: monospace; }
@@ -91,7 +89,7 @@ base_airports = {
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. DATA FETCH & LOGIC
+# 5. DATA FETCH & PRIORITY LOGIC
 if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
@@ -102,6 +100,7 @@ def get_occ_intel(airport_dict):
         try:
             m = Metar(info['icao']); m.update(); t = Taf(info['icao']); t.update()
             v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
+            
             f_issue = None
             if t.data:
                 for line in t.data.forecast:
@@ -111,16 +110,18 @@ def get_occ_intel(airport_dict):
                         for layer in line.clouds:
                             if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
                     
+                    # PRIORITY ORDER ALERT DETECTION
                     reason = None
                     if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): reason = "CLOSED-FZRA"
                     elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
-                    elif gust >= 35: reason = "GUST"
+                    elif "SN" in line.raw: reason = "SNOW"
                     elif v < v_lim: reason = "VIS"
                     elif c < c_lim: reason = "CLOUD"
+                    elif gust >= 35: reason = "GUST"
                     
                     if reason:
-                        f_issue = {"type": reason, "v": v, "c": c, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
+                        f_issue = {"type": reason, "v": v, "c": c, "g": gust, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
                         break
 
             results[iata] = {
@@ -163,8 +164,8 @@ for iata, info in all_stations.items():
             m_res = "CLOSED-FZRA"; marker_color = "#d6001a"; m_severity = "primary"
         elif data['vis'] < v_lim or data['cig'] < c_lim: 
             m_res = "MINIMA"; marker_color = "#d6001a"; m_severity = "primary"
-        elif "TSRA" in data['raw_m']: 
-            m_res = "TSRA"; marker_color = "#eb8f34"
+        elif "TSRA" in data['raw_m']: m_res = "TSRA"; marker_color = "#eb8f34"
+        elif data['w_gst'] > 35: m_res = "GUST"; marker_color = "#eb8f34"
         
         if m_res: metar_alerts[iata] = {"type": m_res, "hex": m_severity}
         else: green_stations.append(iata)
@@ -182,7 +183,7 @@ tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=6, color=mkr['color'], fill=True, popup=folium.Popup(f"<div style='color:black; width:350px; font-family:monospace;'><b>{mkr['iata']}</b><hr>METAR: {mkr['metar']}</div>", max_width=400)).add_to(m)
-st_folium(m, width=1400, height=400, key="map_v21")
+st_folium(m, width=1400, height=400, key="map_v22")
 
 # 7. ALERT ROWS
 st.markdown('<div class="section-title">🔴 ACTUAL WEATHER ALERTS (METAR)</div>', unsafe_allow_html=True)
@@ -205,20 +206,16 @@ if st.session_state.investigate_iata != "None":
     d = weather_intel.get(iata, {"w_spd": 0, "w_gst": 0, "w_dir": 0, "raw_m": "N/A", "raw_t": "N/A"})
     info = all_stations.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     
-    # Safe Fetch to prevent KeyError
-    main_issue = metar_alerts.get(iata, {}).get('type')
-    if not main_issue:
-        main_issue = taf_alerts.get(iata, {}).get('type', "N/A")
+    main_issue = metar_alerts.get(iata, {}).get('type') or taf_alerts.get(iata, {}).get('type', "N/A")
     period = "CURRENT" if iata in metar_alerts else taf_alerts.get(iata, {}).get('period', "N/A")
     
-    impact_stmt = "Operational limits breached. Check aircraft/crew minima capability."
-    if main_issue and "CLOSED" in main_issue: impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limits."
+    impact_stmt = "Operational limits breached. Verify aircraft icing/minima status."
+    if "CLOSED" in main_issue: impact_stmt = "STATION CLOSED for Embraer fleet due to FZRA/FZDZ limitations."
+    if "CAT3" in main_issue: impact_stmt = "LVP Operations. CAT3 Capable aircraft/crew only."
 
-    # WIND DATA FAIL-SAFE
+    # WIND CALC
     xw_msg = ""
-    w_spd = d.get('w_spd', 0)
-    w_gst = d.get('w_gst', 0)
-    w_dir = d.get('w_dir', 0)
+    w_spd, w_gst, w_dir = d.get('w_spd', 0), d.get('w_gst', 0), d.get('w_dir', 0)
     if w_spd > 20 or w_gst > 0:
         xw_comp = calculate_xwind(w_dir, w_spd, info.get('rwy', 0))
         xw_msg = f" | X-WIND: {xw_comp}kt"

@@ -11,8 +11,20 @@ st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="�
 # 2. HUD STYLING
 st.markdown("""
     <style>
+    /* TITLES & HEADERS - NAVY BLUE */
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
+    
+    /* GLOBAL TEXT DEFAULT */
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
+    
+    /* HANDOVER TEXT AREA FIX - DARK TEXT ON LIGHT BG */
+    [data-testid="stTextArea"] textarea { 
+        color: #002366 !important; 
+        background-color: #ffffff !important; 
+        font-weight: bold; 
+        font-family: 'Courier New', monospace;
+        border: 2px solid #002366 !important;
+    }
     
     /* SIDEBAR LOCK */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
@@ -26,7 +38,7 @@ st.markdown("""
         width: 100%; 
         text-transform: uppercase; 
         font-size: 0.52rem !important; 
-        height: 60px !important; /* Locked height for alignment */
+        height: 60px !important; 
         line-height: 1.1 !important; 
         white-space: pre-wrap !important; 
         display: flex;
@@ -42,7 +54,6 @@ st.markdown("""
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
     
-    /* LIMITS TABLE STYLE */
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     </style>
@@ -61,7 +72,7 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. MASTER DATABASE
+# 4. MASTER DATABASE (FULL 46 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -219,13 +230,13 @@ for iata, data in weather_data.items():
             taf_alerts[iata] = {"type": data['f_issue'], "time": data['f_time'], "prob": data['f_prob'], "hex": t_hex}
             if color == "#008000": color = "#eb8f34"
 
-    # MAP POPUP HORIZONTAL REWRITE
+    # MAP POPUP HORIZONTAL
     popup_html = f"""
-    <div style="width:500px; color:black; font-family:monospace; font-size:12px;">
-        <b>{iata} STATION DATA</b><hr>
+    <div style="width:500px; color:black !important; font-family:monospace; font-size:12px;">
+        <b style="color:#002366;">{iata} STATION DATA</b><hr>
         <div style="display:flex; gap:10px;">
-            <div style="flex:1; background:#f0f0f0; padding:5px; border-radius:3px;"><b>METAR</b><br>{data['raw_m']}</div>
-            <div style="flex:1; background:#f0f0f0; padding:5px; border-radius:3px;"><b>TAF</b><br>{data['raw_t']}</div>
+            <div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>METAR</b><br>{data['raw_m']}</div>
+            <div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>TAF</b><br>{data['raw_t']}</div>
         </div>
     </div>
     """
@@ -239,9 +250,9 @@ tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=tile)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=600)).add_to(m)
-st_folium(m, width=800, height=800, key="map_v35")
+st_folium(m, width=800, height=800, key="map_v36")
 
-# 10. ALIGNMENT ALERT ROWS
+# 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(10)
@@ -257,7 +268,7 @@ if taf_alerts:
             p_tag = "\nPROB40" if d['prob'] else ""
             if st.button(f"{iata}\n{d['time']}\n{d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. STRATEGIC ANALYSIS
+# 11. ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d = weather_data.get(iata, {})
@@ -267,7 +278,6 @@ if st.session_state.investigate_iata != "None":
     
     issue = f_alert.get('type') if f_alert else m_alert.get('type', "STABLE")
     period = f_alert.get('time', "CURRENT")
-    
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     
     alt_iata, min_dist = "None", 9999
@@ -283,7 +293,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief: {issue}</h3>
-        <p><b>Weather Summary:</b> {issue} detected for {period} window. Live X-Wind: {xw_val}kt (RWY {info['rwy']}°).</p>
+        <p><b>Weather Summary:</b> Issue detected for {period} window. Live X-Wind: {xw_val}kt (RWY {info['rwy']}°).</p>
         <p><b>Impact Statement:</b> {impact}</p>
         <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
         <hr>
@@ -294,9 +304,11 @@ if st.session_state.investigate_iata != "None":
     </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 12. HANDOVER
+# 12. HANDOVER (FIXED FONT VISIBILITY)
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items():
     h_txt += f"{iata}: {d['type']} ({d['time']}){' - PROB40' if d['prob'] else ''}\n"
-st.text_area("Copy Handover:", value=h_txt, height=150, label_visibility="collapsed")
+
+# EXPLICITLY STYLED AREA
+st.text_area("Handover Report:", value=h_txt, height=200, label_visibility="collapsed")

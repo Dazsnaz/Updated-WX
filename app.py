@@ -11,8 +11,8 @@ st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="�
 # 2. HUD STYLING
 st.markdown("""
     <style>
-    /* FIX TITLE VISIBILITY */
-    h3, .section-header { color: #002366 !important; font-weight: bold; margin-top: 20px; }
+    /* TITLES VISIBILITY - NAVY BLUE */
+    .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     [data-testid="stSidebar"] { background-color: #002366 !important; }
@@ -26,8 +26,9 @@ st.markdown("""
         width: 100%; 
         text-transform: uppercase; 
         font-size: 0.55rem !important;
-        height: 50px !important;
+        height: 52px !important;
         line-height: 1.1 !important;
+        white-space: pre-wrap !important;
     }
     
     .marquee { width: 100%; background-color: #d6001a; color: white; white-space: nowrap; overflow: hidden; padding: 12px; font-weight: bold; border-radius: 5px; margin-bottom: 15px; border: 2px solid white; }
@@ -113,8 +114,7 @@ with st.sidebar:
     if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
     with st.form("manual_add", clear_on_submit=True):
-        new_iata = st.text_input("IATA").upper()
-        new_icao = st.text_input("ICAO").upper()
+        new_iata, new_icao = st.text_input("IATA").upper(), st.text_input("ICAO").upper()
         if st.form_submit_button("Add Station"):
             try:
                 m = Metar(new_icao); m.update()
@@ -150,16 +150,10 @@ def get_weather_intelligence(airport_dict):
                     if reason:
                         f_issue = {"type": reason, "v": v, "c": c, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
                         break
-
-            results[iata] = {
-                "vis": m.data.visibility.value if m.data.visibility else 9999,
-                "ceiling": 9999, "w_dir": m.data.wind_direction.value or 0, "w_spd": m.data.wind_speed.value or 0,
-                "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
-            }
+            results[iata] = {"vis": m.data.visibility.value if m.data.visibility else 9999, "ceiling": 9999, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue}
             if m.data.clouds:
                 for layer in m.data.clouds:
-                    if layer.type in ['BKN', 'OVC'] and layer.base:
-                        results[iata]["ceiling"] = min(results[iata]["ceiling"], layer.base * 100)
+                    if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["ceiling"] = min(results[iata]["ceiling"], layer.base * 100)
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
     return results
 
@@ -171,49 +165,47 @@ for iata, data in weather_data.items():
     info = all_airports[iata]
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     marker_color = "#008000"
-    
     if data['status'] == "online":
         m_type = None
         if info['fleet'] == "Cityflyer" and ("FZRA" in data['raw_m'] or "FZDZ" in data['raw_m']):
             m_type = "CLOSED-FZRA"; marker_color = "#d6001a"; red_list.append(iata)
         elif data['vis'] < v_lim or data['ceiling'] < c_lim:
             m_type = "MINIMA"; marker_color = "#d6001a"; red_list.append(iata)
-        
         if m_type: metar_alerts[iata] = {"type": m_type, "hex": "primary"}
         else: green_stations.append(iata)
-
         if data['f']:
             taf_alerts[iata] = {"type": data['f']['type'], "period": data['f']['p'], "hex": "primary" if data['f']['type'] in ["MINIMA", "CLOSED-FZRA"] else "secondary"}
             if marker_color == "#008000": marker_color = "#eb8f34"
-
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
 # --- UI RENDER ---
 if red_list: st.markdown(f'<div class="marquee"><span>🚨 CRITICAL: {", ".join(red_list)} AT MINIMA</span></div>', unsafe_allow_html=True)
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
-# 9. MAP
+# 9. SQUARE MAP RENDER
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
-m = folium.Map(location=[48.0, 5.0], zoom_start=5, tiles=tile)
+# Center on Europe: 50.0, 10.0
+m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=tile)
 for mkr in map_markers:
     popup_txt = f"<b>{mkr['iata']}</b><br><br>METAR: {mkr['metar']}<br><br>TAF: {mkr['taf']}"
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(popup_txt, max_width=300)).add_to(m)
-st_folium(m, width=1400, height=450, key="map_v27")
 
-# 10. ALERTS (TITLES FIXED TO NAVY)
-st.markdown('<h3 class="section-header">🔴 Actual Alerts (METAR)</h3>', unsafe_allow_html=True)
+# Square aspect ratio: 800x800
+st_folium(m, width=800, height=800, key="map_v28")
+
+# 10. ALERTS
+st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(10)
     for i, (iata, d) in enumerate(metar_alerts.items()):
         with cols[i % 10]:
-            if st.button(f"{iata}\n{d['type']}", key=f"m_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
+            if st.button(f"{iata}\nNOW\n{d['type']}", key=f"m_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-st.markdown('<h3 class="section-header">🟠 Forecast Alerts (TAF)</h3>', unsafe_allow_html=True)
+st.markdown('<div class="section-header">🟠 Forecast Alerts (TAF)</div>', unsafe_allow_html=True)
 if taf_alerts:
     cols_f = st.columns(10)
     for i, (iata, d) in enumerate(taf_alerts.items()):
         with cols_f[i % 10]:
-            # Added Station + Time + Reason
             if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
 # 11. ANALYSIS
@@ -230,7 +222,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""
     <div class="reason-box">
         <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> Forecast Window: {d['f']['p'] if d['f'] else 'Current'}. Issue: {d['f']['type'] if d['f'] else 'Observed Minima'}</p>
+        <p><b>Weather Summary:</b> Issue: {d['f']['type'] if d['f'] else 'Observed Breach'} | Period: {d['f']['p'] if d['f'] else 'Active'}</p>
         <p style="color:#d6001a !important; font-size:1.1em;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
         <hr><small>METAR: {d['raw_m']}<br>TAF: {d['raw_t']}</small>
     </div>""", unsafe_allow_html=True)

@@ -16,9 +16,6 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; width: 100%; text-transform: uppercase; font-size: 0.55rem !important; height: 52px !important; line-height: 1.1 !important; white-space: pre-wrap !important; }
-    .marquee { width: 100%; background-color: #d6001a; color: white; white-space: nowrap; overflow: hidden; padding: 12px; font-weight: bold; border-radius: 5px; margin-bottom: 15px; border: 2px solid white; }
-    .marquee span { display: inline-block; padding-left: 100%; animation: marquee 25s linear infinite; }
-    @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
@@ -34,6 +31,11 @@ def calculate_dist(lat1, lon1, lat2, lon2):
     dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 1)
+
+def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
+    if wind_dir is None or wind_spd is None or rwy_hdg is None: return 0
+    angle = math.radians(wind_dir - rwy_hdg)
+    return round(abs(wind_spd * math.sin(angle)))
 
 # 4. MASTER DATABASE (FULL 46 STATIONS)
 base_airports = {
@@ -73,16 +75,6 @@ base_airports = {
     "LPA": {"icao": "GCLP", "lat": 27.931, "lon": -15.386, "rwy": 30, "fleet": "Euroflyer", "spec": False},
     "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
-    "ZRH": {"icao": "LSZH", "lat": 47.458, "lon": 8.548, "rwy": 160, "fleet": "Cityflyer", "spec": False},
-    "GVA": {"icao": "LSGG", "lat": 46.237, "lon": 6.109, "rwy": 220, "fleet": "Cityflyer", "spec": False},
-    "BER": {"icao": "EDDB", "lat": 52.362, "lon": 13.501, "rwy": 250, "fleet": "Cityflyer", "spec": False},
-    "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.571, "rwy": 250, "fleet": "Cityflyer", "spec": False},
-    "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.277, "rwy": 360, "fleet": "Cityflyer", "spec": False},
-    "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
-    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False},
-    "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
-    "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
-    "SEN": {"icao": "EGMC", "lat": 51.571, "lon": 0.701, "rwy": 230, "fleet": "Cityflyer", "spec": False},
 }
 
 # 5. SESSION STATE
@@ -103,7 +95,7 @@ with st.sidebar:
                 st.cache_data.clear(); st.rerun()
             except: st.error("Invalid ICAO")
 
-# 7. DATA FETCH & TAF DEEP SCAN
+# 7. DATA FETCH
 all_airports = {**base_airports, **st.session_state.manual_stations}
 
 @st.cache_data(ttl=600)
@@ -115,7 +107,6 @@ def get_weather_intelligence(airport_dict):
             v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
             f_issue = None
             if t.data:
-                # SCAN EVERY LINE IN THE TAF (TEMPO, PROB, etc.)
                 for line in t.data.forecast:
                     v = line.visibility.value if line.visibility else 9999
                     c = 9999
@@ -123,8 +114,9 @@ def get_weather_intelligence(airport_dict):
                         for layer in line.clouds:
                             if layer.type in ['BKN', 'OVC'] and layer.base: c = min(c, layer.base * 100)
                     
-                    # Logic Deep Check
                     reason = None
+                    is_prob = "PROB" in line.raw
+                    
                     if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): reason = "CLOSED-FZRA"
                     elif info['fleet'] == "Cityflyer" and 200 <= v <= 550: reason = "CAT3-ONLY"
                     elif "TSRA" in line.raw: reason = "TSRA"
@@ -132,13 +124,17 @@ def get_weather_intelligence(airport_dict):
                     elif c < c_lim: reason = "CLOUD"
                     
                     if reason:
-                        f_issue = {"type": reason, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"}
-                        break # Found a hazard, trigger alert
+                        f_issue = {"type": reason, "p": f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z", "prob": is_prob}
+                        break
 
-            results[iata] = {"vis": m.data.visibility.value if m.data.visibility else 9999, "cig": 9999, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue}
+            results[iata] = {
+                "vis": m.data.visibility.value if m.data.visibility else 9999,
+                "cig": 9999, "w_dir": m.data.wind_direction.value or 0, "w_spd": m.data.wind_speed.value or 0,
+                "w_gst": m.data.wind_gust.value or 0, "raw_m": m.raw, "raw_t": t.raw, "status": "online", "f": f_issue
+            }
             if m.data.clouds:
-                for lyr in m.data.clouds:
-                    if lyr.type in ['BKN', 'OVC'] and lyr.base: results[iata]["cig"] = min(results[iata]["cig"], lyr.base * 100)
+                for layer in m.data.clouds:
+                    if layer.type in ['BKN', 'OVC'] and layer.base: results[iata]["cig"] = min(results[iata]["cig"], layer.base * 100)
         except: results[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f": None}
     return results
 
@@ -159,21 +155,20 @@ for iata, data in weather_data.items():
         if m_type: metar_alerts[iata] = {"type": m_type, "hex": "primary"}
         else: green_stations.append(iata)
         if data['f']:
-            taf_alerts[iata] = {"type": data['f']['type'], "period": data['f']['p'], "hex": "primary" if data['f']['type'] in ["MINIMA", "CLOSED-FZRA"] else "secondary"}
-            if marker_color == "#008000": marker_color = "#eb8f34" # Amber for Map
+            taf_alerts[iata] = {"type": data['f']['type'], "period": data['f']['p'], "prob": data['f']['prob'], "hex": "primary" if data['f']['type'] in ["MINIMA", "CLOSED-FZRA"] else "secondary"}
+            if marker_color == "#008000": marker_color = "#eb8f34"
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": marker_color, "metar": data['raw_m'], "taf": data['raw_t']})
 
 # --- UI RENDER ---
-if red_list: st.markdown(f'<div class="marquee"><span>🚨 CRITICAL: {", ".join(red_list)} AT MINIMA</span></div>', unsafe_allow_html=True)
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
-# 9. SQUARE MAP
+# 9. MAP
 tile = "CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=tile)
 for mkr in map_markers:
-    popup_txt = f"{mkr['iata']}\n\nMETAR: {mkr['metar']}\n\nTAF: {mkr['taf']}"
+    popup_txt = f"<b>{mkr['iata']}</b><br><br>METAR: {mkr['metar']}<br><br>TAF: {mkr['taf']}"
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(popup_txt, parse_html=False, max_width=300)).add_to(m)
-st_folium(m, width=800, height=800, key="map_v29")
+st_folium(m, width=800, height=800, key="map_v30")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -188,13 +183,26 @@ if taf_alerts:
     cols_f = st.columns(10)
     for i, (iata, d) in enumerate(taf_alerts.items()):
         with cols_f[i % 10]:
-            if st.button(f"{iata}\n{d['period']}\n{d['type']}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
+            prob_tag = "\nPROB40" if d['prob'] else ""
+            if st.button(f"{iata}\n{d['period']}\n{d['type']}{prob_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS
+# 11. STRATEGIC ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d = weather_data.get(iata)
     info = all_airports[iata]
+    
+    # Prob/Issue logic
+    is_f = iata in taf_alerts
+    issue_type = taf_alerts[iata]['type'] if is_f else metar_alerts[iata]['type']
+    period = taf_alerts[iata]['period'] if is_f else "Active Now"
+    prob_status = " (Prob40 Risk)" if is_f and taf_alerts[iata]['prob'] else ""
+
+    # Crosswind calculation
+    w_spd = d.get('w_gst', 0) if d.get('w_gst', 0) > d.get('w_spd', 0) else d.get('w_spd', 0)
+    xw = calculate_xwind(d.get('w_dir', 0), w_spd, info['rwy'])
+    xw_display = f" | X-WIND: {xw}kt (RWY {info['rwy']}°)" if w_spd > 20 else ""
+
     alt_iata, min_dist = "None", 9999
     for g in green_stations:
         if g != iata:
@@ -203,9 +211,9 @@ if st.session_state.investigate_iata != "None":
 
     st.markdown(f"""
     <div class="reason-box">
-        <h3>{iata} Strategy Brief</h3>
-        <p><b>Weather Summary:</b> Issue: {d['f']['type'] if d['f'] else 'Observed Breach'} | Period: {d['f']['p'] if d['f'] else 'Active'}</p>
-        <p style="color:#d6001a !important; font-size:1.1em;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
+        <h3>{iata} Strategy Brief: {issue_type}{prob_status}</h3>
+        <p><b>Weather Summary:</b> Issue: {issue_type} | Period: {period}{xw_display}</p>
+        <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
         <hr><small>METAR: {d['raw_m']}<br>TAF: {d['raw_t']}</small>
     </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()

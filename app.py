@@ -4,12 +4,13 @@ from streamlit_folium import st_folium
 from avwx import Metar, Taf
 import math
 import re
+import urllib.parse
 from datetime import datetime
 
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING & JS INJECTION
+# 2. HUD STYLING & ROBUST JS INJECTION
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; display: flex; align-items: center; }
@@ -18,7 +19,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
-    /* SINGLE-LINE HORIZONTAL BUTTONS (v12.5 Style) */
+    /* SINGLE-LINE HORIZONTAL BUTTONS */
     .stButton > button { 
         background-color: #005a9c !important; 
         color: white !important; 
@@ -44,20 +45,20 @@ st.markdown("""
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     
-    /* Copy Icon CSS */
     .copy-btn { margin-left: 15px; cursor: pointer; font-size: 1.3rem; filter: grayscale(1); transition: 0.2s; }
     .copy-btn:hover { filter: grayscale(0); transform: scale(1.2); }
     </style>
 
     <script>
-    function tacticalCopy(text) {
+    function tacticalCopy(encodedText) {
+        const text = decodeURIComponent(encodedText);
         const textArea = document.createElement("textarea");
-        textArea.value = text.replace(/\\n/g, "\n");
+        textArea.value = text;
         document.body.appendChild(textArea);
         textArea.select();
         try {
             document.execCommand('copy');
-            alert("COPIED TO CLIPBOARD:\n" + textArea.value);
+            alert("TACTICAL DATA COPIED");
         } catch (err) {
             console.error('Copy failed', err);
         }
@@ -154,7 +155,7 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. SCHEDULED DATA FETCH (EVERY 30 MINS)
+# 7. SCHEDULED DATA FETCH (ON THE HOUR & 30 PAST)
 now = datetime.now()
 refresh_block = 0 if now.minute < 30 else 30
 sync_key = now.strftime('%Y%m%d%H') + str(refresh_block)
@@ -257,7 +258,7 @@ if taf_alerts:
             p_tag = " PROB" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS WITH INTEGRATED COPY
+# 11. ANALYSIS WITH URI-ENCODED COPY
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -274,13 +275,14 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    # STRATEGY TEXT DATA
-    brief_data = f"{iata} STRATEGY: {issue_desc}\\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°. \\nImpact: {impact} \\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
+    # ENCODE STRING FOR SAFE PASSING TO JS
+    brief_data = f"{iata} STRATEGY: {issue_desc}\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°.\nImpact: {impact}\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
+    encoded_brief = urllib.parse.quote(brief_data)
     
     st.markdown(f"""
         <div class="reason-box">
             <h3>{iata} Strategy Brief: {issue_desc} 
-                <span class="copy-btn" onclick="tacticalCopy('{brief_data}')" title="Copy Tactical Brief">📋</span>
+                <span class="copy-btn" onclick="tacticalCopy('{encoded_brief}')" title="Copy Tactical Brief">📋</span>
             </h3>
             <p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p>
             <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
@@ -292,13 +294,14 @@ if st.session_state.investigate_iata != "None":
         </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 12. HANDOVER WITH INTEGRATED COPY
-h_txt_clean = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\\n" + "="*35 + "\\n"
-for iata, d in taf_alerts.items(): h_txt_clean += f"{iata}: {d['type']} ({d['time']})\\n"
+# 12. HANDOVER WITH URI-ENCODED COPY
+h_txt_clean = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
+for iata, d in taf_alerts.items(): h_txt_clean += f"{iata}: {d['type']} ({d['time']})\n"
+encoded_handover = urllib.parse.quote(h_txt_clean)
 
 st.markdown(f"""
     <div class="section-header">
         📝 Shift Handover Log 
-        <span class="copy-btn" onclick="tacticalCopy('{h_txt_clean}')" title="Copy Handover Report">📋</span>
+        <span class="copy-btn" onclick="tacticalCopy('{encoded_handover}')" title="Copy Handover Report">📋</span>
     </div>""", unsafe_allow_html=True)
-st.text_area("Live Report View:", value=h_txt_clean.replace('\\n', '\n'), height=200, label_visibility="collapsed")
+st.text_area("Live Report View:", value=h_txt_clean, height=200, label_visibility="collapsed")

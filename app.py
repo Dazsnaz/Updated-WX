@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING
+# 2. HUD STYLING & JS INJECTION
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; display: flex; align-items: center; }
@@ -18,7 +18,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
-    /* SINGLE-LINE HORIZONTAL BUTTONS */
+    /* SINGLE-LINE HORIZONTAL BUTTONS (v12.5 Style) */
     .stButton > button { 
         background-color: #005a9c !important; 
         color: white !important; 
@@ -44,20 +44,24 @@ st.markdown("""
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     
-    /* Copy Icon Styling */
-    .copy-btn { margin-left: 15px; cursor: pointer; font-size: 1.2rem; filter: grayscale(1); transition: 0.2s; }
+    /* Copy Icon CSS */
+    .copy-btn { margin-left: 15px; cursor: pointer; font-size: 1.3rem; filter: grayscale(1); transition: 0.2s; }
     .copy-btn:hover { filter: grayscale(0); transform: scale(1.2); }
     </style>
-    
+
     <script>
-    function copyToClipboard(text) {
-        const tempInput = document.createElement("textarea");
-        tempInput.value = text.replace(/\\n/g, "\\n");
-        document.body.appendChild(tempInput);
-        tempInput.select();
-        document.execCommand("copy");
-        document.body.removeChild(tempInput);
-        alert("Tactical Info Copied to Clipboard");
+    function tacticalCopy(text) {
+        const textArea = document.createElement("textarea");
+        textArea.value = text.replace(/\\n/g, "\n");
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert("COPIED TO CLIPBOARD:\n" + textArea.value);
+        } catch (err) {
+            console.error('Copy failed', err);
+        }
+        document.body.removeChild(textArea);
     }
     </script>
     """, unsafe_allow_html=True)
@@ -150,7 +154,7 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. SCHEDULED DATA FETCH (ON THE HOUR & 30 PAST)
+# 7. SCHEDULED DATA FETCH (EVERY 30 MINS)
 now = datetime.now()
 refresh_block = 0 if now.minute < 30 else 30
 sync_key = now.strftime('%Y%m%d%H') + str(refresh_block)
@@ -216,11 +220,11 @@ for iata, info in base_airports.items():
         if is_shown:
             if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
             else: green_stations.append(iata)
-            if data.get('f_issues'):
-                p_tag = " (PROB)" if data.get('f_prob') else ""
-                forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data.get('f_time','')}"
+            if data['f_issues']:
+                p_tag = " (PROB)" if data['f_prob'] else ""
+                forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data['f_time']}"
                 t_hex = "primary" if any(x in str(data['f_issues']) for x in ["VIS", "CLOUD", "FZRA"]) else "secondary"
-                taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data.get('f_time',''), "prob": data.get('f_prob', False), "hex": t_hex}
+                taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": t_hex}
                 if color == "#008000": color = "#eb8f34"
 
     if is_shown:
@@ -235,7 +239,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v130")
+st_folium(m, width=1000, height=1000, key="map_v131")
 
 # 10. ALERTS (3-COLUMNS SINGLE LINE)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -253,7 +257,7 @@ if taf_alerts:
             p_tag = " PROB" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS WITH PRECISION COPY
+# 11. ANALYSIS WITH INTEGRATED COPY
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -270,13 +274,13 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    # STRATEGY TEXT (FOR CLIPBOARD ONLY)
-    copy_text = f"{iata} STRATEGY: {issue_desc}\\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°\\nImpact: {impact}\\nStrategic Alternate: {alt_iata} ({min_dist} NM)"
+    # STRATEGY TEXT DATA
+    brief_data = f"{iata} STRATEGY: {issue_desc}\\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°. \\nImpact: {impact} \\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
     
     st.markdown(f"""
         <div class="reason-box">
             <h3>{iata} Strategy Brief: {issue_desc} 
-                <span class="copy-btn" onclick="copyToClipboard('{copy_text}')" title="Copy Brief">📋</span>
+                <span class="copy-btn" onclick="tacticalCopy('{brief_data}')" title="Copy Tactical Brief">📋</span>
             </h3>
             <p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p>
             <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
@@ -288,9 +292,13 @@ if st.session_state.investigate_iata != "None":
         </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 12. HANDOVER WITH PRECISION COPY
+# 12. HANDOVER WITH INTEGRATED COPY
 h_txt_clean = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\\n" + "="*35 + "\\n"
 for iata, d in taf_alerts.items(): h_txt_clean += f"{iata}: {d['type']} ({d['time']})\\n"
 
-st.markdown(f'<div class="section-header">📝 Shift Handover Log <span class="copy-btn" onclick="copyToClipboard(\'{h_txt_clean}\')" title="Copy Handover">📋</span></div>', unsafe_allow_html=True)
-st.text_area("Handover Report:", value=h_txt_clean.replace('\\n', '\n'), height=200, label_visibility="collapsed")
+st.markdown(f"""
+    <div class="section-header">
+        📝 Shift Handover Log 
+        <span class="copy-btn" onclick="tacticalCopy('{h_txt_clean}')" title="Copy Handover Report">📋</span>
+    </div>""", unsafe_allow_html=True)
+st.text_area("Live Report View:", value=h_txt_clean.replace('\\n', '\n'), height=200, label_visibility="collapsed")

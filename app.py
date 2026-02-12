@@ -54,7 +54,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# [cite_start]4. MASTER DATABASE [cite: 15-22]
+# [cite_start]4. MASTER DATABASE [cite: 103-110]
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -121,15 +121,14 @@ with st.sidebar:
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
     st.markdown("---")
     st.markdown("📊 **FLEET X-WIND LIMITS**")
-    [cite_start]st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True) [cite: 24]
+    st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. SCHEDULED DATA FETCH LOGIC
-# Calculate a sync key based on the current 30-minute block
+# 7. SCHEDULED DATA FETCH (ON THE HOUR & 30 PAST)
 now = datetime.now()
 refresh_block = 0 if now.minute < 30 else 30
 sync_key = now.strftime('%Y%m%d%H') + str(refresh_block)
 
-@st.cache_data(ttl=None) # Rely on sync_key to trigger re-runs every 30 mins
+@st.cache_data(ttl=None)
 def get_intel_global(airport_dict, schedule_key):
     res = {}
     for iata, info in airport_dict.items():
@@ -230,7 +229,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v121")
+st_folium(m, width=1000, height=1000, key="map_v122")
 
 # 10. RESPONSIVE ALERTS (5-COLUMNS)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

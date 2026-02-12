@@ -72,7 +72,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b(TEMPO|PROB\d{2})\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE
+# 4. MASTER DATABASE (Updated with BCN & EXT)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -95,6 +95,7 @@ base_airports = {
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
     "SEN": {"icao": "EGMC", "lat": 51.571, "lon": 0.701, "rwy": 230, "fleet": "Cityflyer", "spec": False},
+    "EXT": {"icao": "EGTE", "lat": 50.734, "lon": -3.414, "rwy": 260, "fleet": "Cityflyer", "spec": False}, # Added CF
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
@@ -121,11 +122,12 @@ base_airports = {
     "LPA": {"icao": "GCLP", "lat": 27.931, "lon": -15.386, "rwy": 30, "fleet": "Euroflyer", "spec": False},
     "FUE": {"icao": "GCLP", "lat": 28.452, "lon": -13.864, "rwy": 10, "fleet": "Euroflyer", "spec": False},
     "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
+    "BCN": {"icao": "LEBL", "lat": 41.297, "lon": 2.083, "rwy": 70, "fleet": "Euroflyer", "spec": False}, # Added EF
+    # Background Preferred Alternates
     "PSA": {"icao": "LIRP", "lat": 43.683, "lon": 10.392, "rwy": 40, "fleet": "Alternate", "spec": False},
     "BLQ": {"icao": "LIPE", "lat": 44.535, "lon": 11.288, "rwy": 120, "fleet": "Alternate", "spec": False},
     "PSO": {"icao": "LPPS", "lat": 33.070, "lon": -16.341, "rwy": 180, "fleet": "Alternate", "spec": True},
     "MUC": {"icao": "EDDM", "lat": 48.353, "lon": 11.786, "rwy": 80, "fleet": "Alternate", "spec": False},
-    "BCN": {"icao": "LEBL", "lat": 41.297, "lon": 2.083, "rwy": 70, "fleet": "Alternate", "spec": False},
 }
 
 preferred_alts = {"FLR": ["PSA", "BLQ"], "FNC": ["PSO"], "INN": ["MUC"], "PMI": ["BCN"], "IBZ": ["BCN"]}
@@ -213,7 +215,7 @@ for iata, info in base_airports.items():
         if data['cig'] < c_lim: m_issues.append(f"CLOUD {data['cig_label']}")
         if xw >= 25: m_issues.append(f"X-WIND {xw}kt")
         
-        # COLOR LOGIC: Force RED if Actual Limit breached
+        # Color Logic: Force RED if xwind >= 25kt
         if m_issues: 
             color = "#d6001a" if (xw >= 25 or any(x in str(m_issues) for x in ["VIS", "CLOUD", "FZRA"])) else "#eb8f34"
             actual_str = " & ".join(m_issues)
@@ -221,7 +223,6 @@ for iata, info in base_airports.items():
             if is_shown and info['fleet'] != "Alternate": metar_alerts[iata] = {"type": btn_label, "detail": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
         elif info['fleet'] != "Alternate": green_stations.append(iata)
             
-        # FORECAST LOGIC: Always populate if exists
         if data.get('f_issues'):
             p_tag = " (PROB)" if data['f_prob'] else ""
             forecast_str = f"{' & '.join(data['f_issues'])}{p_tag} @ {data.get('f_time','')}"
@@ -233,7 +234,7 @@ for iata, info in base_airports.items():
     if is_shown:
         r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
         rwy_str = f"{min(r1,r2):02d}/{max(r1,r2):02d}"
-        popup_html = f"""<div style="width:600px; color:black !important; font-family:sans-serif; font-size:16px; line-height:1.4;"><b style="color:#002366; font-size:20px; border-bottom:2px solid #d6001a; display:block; padding-bottom:5px; margin-bottom:10px;">{iata} STATUS</b><div style="margin-top:5px; padding:12px; border-left:8px solid {color}; background:#f4f4f4;"><b style="color:#002366; font-size:18px;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else '#002366'}; font-weight:900; font-size:20px;">{xw} KT</span><br><div style="margin-top:8px;"><b>ACTUAL:</b> <span style="color:#d6001a; font-weight:bold;">{actual_str}</span><br><b>FORECAST:</b> <span style="color:#eb8f34; font-weight:bold;">{forecast_str}</span></div></div><hr><div><b>METAR:</b><br>{bold_hazard(data['raw_m'])}<br><br><b>TAF:</b><br>{bold_hazard(data['raw_t'])}</div></div>"""
+        popup_html = f"""<div style="width:600px; color:black !important; font-family:sans-serif; font-size:16px; line-height:1.4;"><b style="color:#002366; font-size:20px; border-bottom:2px solid #d6001a; display:block; padding-bottom:5px; margin-bottom:10px;">{iata} STATUS</b><div style="margin-top:5px; padding:12px; border-left:8px solid {color}; background:#f4f4f4; border-radius:4px;"><b style="color:#002366; font-size:18px;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else '#002366'}; font-weight:900; font-size:20px;">{xw} KT</span><br><div style="margin-top:8px;"><b>ACTUAL:</b> <span style="color:#d6001a; font-weight:bold;">{actual_str}</span><br><b>FORECAST:</b> <span style="color:#eb8f34; font-weight:bold;">{forecast_str}</span></div></div><hr><div><b>METAR:</b><br>{bold_hazard(data['raw_m'])}<br><br><b>TAF:</b><br>{bold_hazard(data['raw_t'])}</div></div>"""
         map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # 9. UI RENDER
@@ -241,9 +242,9 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[45.0, 5.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v142")
+st_folium(m, width=1000, height=1000, key="map_v143")
 
-# 10. ALERTS (BOTH SHOW SIMULTANEOUSLY)
+# 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(3)
@@ -268,6 +269,7 @@ if st.session_state.investigate_iata != "None":
     if any(x in issue_desc for x in ["VIS", "CLOUD"]): impact = "LVP likely. CAT III currency req. Check fuel."
     elif "FZ" in issue_desc: impact = "Embraer fleet restricted (FZRA limits)."
     elif "X-WIND" in issue_desc: impact = "Critical crosswind (>=25kt)."
+    
     alt_iata, alt_note = "None", ""
     network_targets = preferred_alts.get(iata, [])
     found_network = False

@@ -18,7 +18,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
-    /* SINGLE-LINE HORIZONTAL BUTTONS (v12.5 Style) */
+    /* SINGLE-LINE HORIZONTAL BUTTONS (v12.5) */
     .stButton > button { 
         background-color: #005a9c !important; 
         color: white !important; 
@@ -29,10 +29,7 @@ st.markdown("""
         height: 42px !important; 
         line-height: 1.0 !important; 
         white-space: nowrap !important; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        text-align: center; 
+        display: flex; align-items: center; justify-content: center; text-align: center; 
         padding: 0 10px !important;
         border-radius: 4px !important;
     }
@@ -74,7 +71,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE 
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -207,10 +204,12 @@ for iata, info in base_airports.items():
         if is_shown:
             if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
             else: green_stations.append(iata)
-            if data['f_issues']:
-                p_tag = " (PROB)" if data['f_prob'] else ""
-                forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data['f_time']}"
-                taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": t_hex}
+            # FIXED: Safe Retrieval of Forecast Data
+            if data.get('f_issues'):
+                p_tag = " (PROB)" if data.get('f_prob') else ""
+                forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data.get('f_time','')}"
+                t_hex = "primary" if any(x in str(data['f_issues']) for x in ["VIS", "CLOUD", "FZRA"]) else "secondary"
+                taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data.get('f_time',''), "prob": data.get('f_prob', False), "hex": t_hex}
                 if color == "#008000": color = "#eb8f34"
 
     if is_shown:
@@ -225,7 +224,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v127")
+st_folium(m, width=1000, height=1000, key="map_v129")
 
 # 10. ALERTS (3-COLUMNS SINGLE LINE)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -260,7 +259,7 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    # STRATEGY STRING
+    # STRATEGY STRING FOR JS CLIPBOARD
     copy_brief = f"{iata} STRATEGY: {issue_desc}\\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°. \\nImpact: {impact} \\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
     
     st.markdown(f"""
@@ -283,4 +282,4 @@ h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\\n" + "="*35 + "\\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\\n"
 
 st.markdown(f'<div class="section-header">📝 Shift Handover Log <span class="copy-btn" onclick="navigator.clipboard.writeText(\'{h_txt}\').then(() => alert(\'Handover Copied!\'))">📋</span></div>', unsafe_allow_html=True)
-st.text_area("Report View:", value=h_txt.replace('\\n', '\n'), height=200, label_visibility="collapsed")
+st.text_area("Handover View:", value=h_txt.replace('\\n', '\n'), height=200, label_visibility="collapsed")

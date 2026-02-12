@@ -48,13 +48,13 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
 
 def bold_hazard(text):
     if not text or text == "N/A": return text
-    text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text) # Vis digits
-    text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text) # Ceiling groups
+    text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text)
+    text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text)
     text = re.sub(r'(\b(FG|TSRA|SN|FZRA|FZDZ|RA|DZ|TS|WIND|XWIND|VIS|CLOUD|FOG)\b)', r'<b>\1</b>', text)
-    text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text) # Wind strings
+    text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 46)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -140,7 +140,6 @@ def get_intel_global(airport_dict):
                         for lyr in line.clouds:
                             if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
                     line_issues = []
-                    # [cite_start]TACTICAL PARSING [cite: 160-161]
                     if info['fleet'] == "Cityflyer" and ("FZRA" in line.raw or "FZDZ" in line.raw): 
                         if "FZRA" in line.raw: line_issues.append("FZRA")
                         if "FZDZ" in line.raw: line_issues.append("FZDZ")
@@ -181,15 +180,17 @@ for iata, info in base_airports.items():
     if data['status'] == "online":
         xw = calculate_xwind(data.get('w_dir', 0), max(data.get('w_spd', 0), data.get('w_gst', 0)), info['rwy'])
         
-        # [cite_start]METAR TACTICAL TRIGGERS [cite: 166-169]
         if info['fleet'] == "Cityflyer":
             if "FZRA" in data['raw_m']: m_issues.append("FZRA"); color = "#d6001a"
             if "FZDZ" in data['raw_m']: m_issues.append("FZDZ"); color = "#d6001a"
         if data['vis'] < v_lim: m_issues.append("VIS"); color = "#d6001a"
         if data['cig'] < c_lim: m_issues.append("CLOUD"); color = "#d6001a"
-        if xw > 25: m_issues.append("XWIND"); color = "#eb8f34"
+        
+        # UPDATED: XWIND Threshold for Red Alert (cite: Conversational Requirement)
+        if xw >= 25: m_issues.append("XWIND"); color = "#d6001a"
+        
         if data.get('w_spd', 0) > 30 or data.get('w_gst', 0) > 35: m_issues.append("WIND"); color = "#eb8f34"
-        if "FG" in data['raw_m']: m_issues.append("FOG"); color = "#eb8f34"
+        if "FG" in data['raw_m'] and "VIS" not in m_issues: m_issues.append("FOG"); color = "#eb8f34"
         
         if is_shown:
             if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
@@ -210,7 +211,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WX HUD</div><div>{datetime.now().s
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_v90")
+st_folium(m, width=1200, height=1200, key="map_v95")
 
 # 10. RESPONSIVE ALERTS (5-COLUMNS)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -237,14 +238,14 @@ if st.session_state.investigate_iata != "None":
     impact = "Standard operations. Monitor trends."
     if "VIS" in issue_desc or "CLOUD" in issue_desc: impact = "LVP procedures likely. CAT III currency required."
     elif "FZRA" in issue_desc or "FZDZ" in issue_desc: impact = "Station safety limits breached. Embraer fleet restricted."
-    elif "WIND" in issue_desc or "XWIND" in issue_desc: impact = "Crosswind component exceeds margins. Verify fleet limits."
+    elif "XWIND" in issue_desc: impact = "Critical crosswind (>=25kt). Verify runway state and flight safety margins."
 
     alt_iata, min_dist = "None", 9999
     for g in green_stations:
         if g != iata:
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
-    st.markdown(f"""<div class=\"reason-box\"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p><p style=\"color:#d6001a !important; font-size:1.1rem;\"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style=\"display:flex; gap:20px;\"><div style=\"flex:1;\"><b>METAR:</b><br><small>{bold_hazard(d.get('raw_m'))}</small></div><div style=\"flex:1;\"><b>TAF:</b><br><small>{bold_hazard(d.get('raw_t'))}</small></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{bold_hazard(d.get('raw_m'))}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{bold_hazard(d.get('raw_t'))}</small></div></div></div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
 # 12. HANDOVER

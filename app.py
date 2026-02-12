@@ -12,13 +12,13 @@ st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="�
 # 2. HUD STYLING
 st.markdown("""
     <style>
-    .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
+    .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; display: flex; align-items: center; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; font-family: 'Courier New', monospace; }
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
-    /* SINGLE-LINE HORIZONTAL BUTTONS */
+    /* SINGLE-LINE HORIZONTAL BUTTONS (v12.5 Style) */
     .stButton > button { 
         background-color: #005a9c !important; 
         color: white !important; 
@@ -46,6 +46,10 @@ st.markdown("""
     
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
+    
+    /* Copy Icon CSS */
+    .copy-btn { margin-left: 15px; cursor: pointer; font-size: 1.3rem; transition: transform 0.2s; }
+    .copy-btn:hover { transform: scale(1.2); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,7 +74,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# [cite_start]4. MASTER DATABASE [cite: 15-22]
+# 4. MASTER DATABASE 
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -206,7 +210,6 @@ for iata, info in base_airports.items():
             if data['f_issues']:
                 p_tag = " (PROB)" if data['f_prob'] else ""
                 forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data['f_time']}"
-                t_hex = "primary" if any(x in str(data['f_issues']) for x in ["VIS", "CLOUD", "FZRA"]) else "secondary"
                 taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": t_hex}
                 if color == "#008000": color = "#eb8f34"
 
@@ -240,7 +243,7 @@ if taf_alerts:
             p_tag = " PROB" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS WITH WEATHER & COPY
+# 11. ANALYSIS WITH DIRECT JS COPY
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -248,7 +251,7 @@ if st.session_state.investigate_iata != "None":
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     impact = "Standard operations. Monitor trends."
     if "VIS" in issue_desc or "CLOUD" in issue_desc: impact = "LVP procedures likely. CAT III currency required."
-    elif "FZRA" in issue_desc or "FZDZ" in issue_desc: impact = "Station safety limits breached. Embraer fleet restricted."
+    elif "FZRA" in issue_desc: impact = "Station safety limits breached. Embraer fleet restricted."
     elif "X-WIND" in issue_desc: impact = "Critical crosswind (>=25kt). Verify runway state and safety margins."
 
     alt_iata, min_dist = "None", 9999
@@ -257,19 +260,27 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{bold_hazard(d.get('raw_m'))}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{bold_hazard(d.get('raw_t'))}</small></div></div></div>""", unsafe_allow_html=True)
+    # STRATEGY STRING
+    copy_brief = f"{iata} STRATEGY: {issue_desc}\\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°. \\nImpact: {impact} \\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
     
-    # STRATEGY COPY BOX (Clean format)
-    copy_brief = f"{iata} STRATEGY: {issue_desc}\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°.\nImpact: {impact}\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
-    st.caption("📋 Click icon top-right to copy brief:")
-    st.code(copy_brief, language=None)
-    
+    st.markdown(f"""
+        <div class="reason-box">
+            <h3>{iata} Strategy Brief: {issue_desc} 
+                <span class="copy-btn" onclick="navigator.clipboard.writeText('{copy_brief}').then(() => alert('Brief Copied!'))">📋</span>
+            </h3>
+            <p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p>
+            <p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p>
+            <hr>
+            <div style="display:flex; gap:20px;">
+                <div style="flex:1;"><b>METAR:</b><br><small>{bold_hazard(d.get('raw_m'))}</small></div>
+                <div style="flex:1;"><b>TAF:</b><br><small>{bold_hazard(d.get('raw_t'))}</small></div>
+            </div>
+        </div>""", unsafe_allow_html=True)
     if st.button("Close Analysis"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 12. HANDOVER WITH COPY
-st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
-h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
-for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"
-st.text_area("Handover Report View:", value=h_txt, height=200, label_visibility="collapsed")
-st.caption("📋 Click icon top-right to copy full handover report:")
-st.code(h_txt, language=None)
+# 12. HANDOVER WITH DIRECT JS COPY
+h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\\n" + "="*35 + "\\n"
+for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\\n"
+
+st.markdown(f'<div class="section-header">📝 Shift Handover Log <span class="copy-btn" onclick="navigator.clipboard.writeText(\'{h_txt}\').then(() => alert(\'Handover Copied!\'))">📋</span></div>', unsafe_allow_html=True)
+st.text_area("Report View:", value=h_txt.replace('\\n', '\n'), height=200, label_visibility="collapsed")

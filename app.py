@@ -18,14 +18,14 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
-    /* HORIZONTAL RECTANGLE BUTTONS (SINGLE LINE) */
+    /* SINGLE-LINE HORIZONTAL BUTTONS */
     .stButton > button { 
         background-color: #005a9c !important; 
         color: white !important; 
         border: 1px solid white !important; 
         width: 100% !important; 
         text-transform: uppercase; 
-        font-size: 0.70rem !important; 
+        font-size: 0.72rem !important; 
         height: 42px !important; 
         line-height: 1.0 !important; 
         white-space: nowrap !important; 
@@ -33,7 +33,7 @@ st.markdown("""
         align-items: center; 
         justify-content: center; 
         text-align: center; 
-        padding: 0 8px !important;
+        padding: 0 10px !important;
         border-radius: 4px !important;
     }
     
@@ -214,7 +214,7 @@ for iata, info in base_airports.items():
         r1 = int(info['rwy']/10); r2 = int(((info['rwy']+180)%360)/10)
         rwy_str = f"{min(r1,r2):02d}/{max(r1,r2):02d}"
         m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
-        popup_html = f"""<div style="width:600px; color:black !important; font-family:sans-serif; font-size:16px; line-height:1.4;"><b style="color:#002366; font-size:20px; border-bottom:2px solid #d6001a; display:block; padding-bottom:5px; margin-bottom:10px;">{iata} STATUS</b><div style="margin-top:5px; padding:12px; border-left:8px solid {color}; background:#f4f4f4; border-radius:4px;"><b style="color:#002366; font-size:18px;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else '#002366'}; font-weight:900; font-size:20px;">{xw} KT</span><br><div style="margin-top:8px;"><b>ACTUAL:</b> <span style="color:#d6001a; font-weight:bold;">{actual_str}</span><br><b>FORECAST:</b> <span style="color:#eb8f34; font-weight:bold;">{forecast_str}</span></div></div><hr style="margin:15px 0;"><div style="display:flex; gap:15px;"><div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;"><b style="color:#002366; font-size:14px;">METAR</b><br><div style="font-family:monospace; font-size:15px; margin-top:5px;">{m_bold}</div></div><div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;"><b style="color:#002366; font-size:14px;">TAF</b><br><div style="font-family:monospace; font-size:15px; margin-top:5px;">{t_bold}</div></div></div></div>"""
+        popup_html = f"""<div style="width:600px; color:black !important; font-family:sans-serif; font-size:16px; line-height:1.4;"><b style="color:#002366; font-size:20px; border-bottom:2px solid #d6001a; display:block; padding-bottom:5px; margin-bottom:10px;">{iata} STATION STATUS</b><div style="margin-top:5px; padding:12px; border-left:8px solid {color}; background:#f4f4f4; border-radius:4px;"><b style="color:#002366; font-size:18px;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else '#002366'}; font-weight:900; font-size:20px;">{xw} KT</span><br><div style="margin-top:8px;"><b>ACTUAL ALERT:</b> <span style="color:#d6001a; font-weight:bold;">{actual_str}</span><br><b>FORECAST ALERT:</b> <span style="color:#eb8f34; font-weight:bold;">{forecast_str}</span></div></div><hr style="margin:15px 0;"><div style="display:flex; gap:15px;"><div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;"><b style="color:#002366; font-size:14px;">METAR DATA</b><br><div style="font-family:monospace; font-size:15px; margin-top:5px;">{m_bold}</div></div><div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;"><b style="color:#002366; font-size:14px;">TAF DATA</b><br><div style="font-family:monospace; font-size:15px; margin-top:5px;">{t_bold}</div></div></div></div>"""
         map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # --- UI RENDER ---
@@ -222,7 +222,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v126")
+st_folium(m, width=1000, height=1000, key="map_v127")
 
 # 10. ALERTS (3-COLUMNS SINGLE LINE)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -240,7 +240,7 @@ if taf_alerts:
             p_tag = " PROB" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS WITH COPY
+# 11. ANALYSIS WITH WEATHER & COPY
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -257,9 +257,9 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief: {issue_desc}</h3><p><b>WX Summary:</b> Live crosswind <b>{xw_val}kt</b> for RWY {info['rwy']}°. <b>Impact:</b> {impact}</p><p style="color:#d6001a !important; font-size:1.1rem;"><b>✈️ Strategic Alternate:</b> {alt_iata} ({min_dist} NM).</p><hr><div style="display:flex; gap:20px;"><div style="flex:1;"><b>METAR:</b><br><small>{bold_hazard(d.get('raw_m'))}</small></div><div style="flex:1;"><b>TAF:</b><br><small>{bold_hazard(d.get('raw_t'))}</small></div></div></div>""", unsafe_allow_html=True)
     
-    # STRATEGY COPY BOX
+    # STRATEGY COPY BOX (Clean format)
     copy_brief = f"{iata} STRATEGY: {issue_desc}\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°.\nImpact: {impact}\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
     st.caption("📋 Click icon top-right to copy brief:")
     st.code(copy_brief, language=None)
@@ -270,8 +270,6 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, label_visibility="collapsed")
-
-# HANDOVER COPY BOX
+st.text_area("Handover Report View:", value=h_txt, height=200, label_visibility="collapsed")
 st.caption("📋 Click icon top-right to copy full handover report:")
 st.code(h_txt, language=None)

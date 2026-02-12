@@ -10,7 +10,7 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING & DIRECT JS COPY
+# 2. HUD STYLING & ROBUST JS COPY
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; display: flex; align-items: center; }
@@ -45,6 +45,7 @@ st.markdown("""
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     
+    /* Precision Copy Icon Styling */
     .copy-btn { margin-left: 15px; cursor: pointer; font-size: 1.3rem; filter: grayscale(1); transition: 0.2s; }
     .copy-btn:hover { filter: grayscale(0); transform: scale(1.2); }
     </style>
@@ -56,14 +57,25 @@ st.markdown("""
         textArea.value = text;
         document.body.appendChild(textArea);
         textArea.select();
-        document.execCommand('copy');
+        try {
+            document.execCommand('copy');
+            alert("TACTICAL DATA COPIED TO CLIPBOARD");
+        } catch (err) {
+            console.error('Copy failed', err);
+        }
         document.body.removeChild(textArea);
-        alert("COPIED TO CLIPBOARD");
     }
     </script>
     """, unsafe_allow_html=True)
 
-# 3. UTILITIES
+# 3. UTILITIES (FIXED NameError: calculate_dist defined here)
+def calculate_dist(lat1, lon1, lat2, lon2):
+    R = 3440.065 # Nautical Miles
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 1)
+
 def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     if wind_dir is None or wind_spd is None or rwy_hdg is None: return 0
     angle = math.radians(wind_dir - rwy_hdg)
@@ -208,7 +220,6 @@ for iata, info in base_airports.items():
         if xw >= 25: m_issues.append("X-WIND"); color = "#d6001a"
         
         if is_shown:
-            # Button format stays simple
             btn_type = " / ".join([x.split(' ')[0] for x in m_issues]) 
             if m_issues: actual_str = " / ".join(m_issues); metar_alerts[iata] = {"type": btn_type, "detail": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
             else: green_stations.append(iata)
@@ -232,9 +243,9 @@ st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.no
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v132")
+st_folium(m, width=1000, height=1000, key="map_v133")
 
-# 10. ALERTS (BUTTONS REMAIN SIMPLE)
+# 10. ALERTS (BUTTONS)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(3)
@@ -254,7 +265,6 @@ if taf_alerts:
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
-    # Detailed desc for the brief
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('detail', "STABLE")
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     impact = "Standard operations. Monitor trends."
@@ -268,7 +278,7 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
     
-    # STRATEGY TEXT (DETAILED)
+    # ENCODE DATA FOR COPY
     brief_data = f"{iata} STRATEGY: {issue_desc}\nSummary: Live crosswind {xw_val}kt for RWY {info['rwy']}°.\nImpact: {impact}\nStrategic Alternate: {alt_iata} ({min_dist} NM)."
     encoded_brief = urllib.parse.quote(brief_data)
     
@@ -289,8 +299,7 @@ if st.session_state.investigate_iata != "None":
 
 # 12. HANDOVER WITH DETAILED DESCRIPTION & URI COPY
 h_txt_clean = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
-for i_ata, d_taf in taf_alerts.items(): 
-    h_txt_clean += f"{i_ata}: {d_taf['detail']}\n"
+for i_ata, d_taf in taf_alerts.items(): h_txt_clean += f"{i_ata}: {d_taf['detail']}\n"
 encoded_handover = urllib.parse.quote(h_txt_clean)
 
 st.markdown(f"""

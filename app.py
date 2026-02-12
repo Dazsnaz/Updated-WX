@@ -54,7 +54,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE [cite: 15-22]
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -112,7 +112,8 @@ if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata
 with st.sidebar:
     st.title("🛠️ COMMAND SETTINGS")
     if st.button("🔄 MANUAL DATA REFRESH"):
-        st.cache_data.clear(); st.rerun()
+        st.cache_data.clear()
+        st.rerun()
     st.markdown("---")
     st.markdown("✈️ **FLEET DISPLAY**")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
@@ -122,7 +123,7 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. BACKGROUND DATA FETCH (STABLE CORE) [cite: 25-32]
+# 7. BACKGROUND DATA FETCH (STABLE CORE)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -164,7 +165,7 @@ def get_intel_global(airport_dict):
 
 weather_data = get_intel_global(base_airports)
 
-# 8. FILTER & UI LOOP 
+# 8. FILTER & UI LOOP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
@@ -194,18 +195,28 @@ for iata, info in base_airports.items():
         r1 = int(info['rwy']/10); r2 = int(((info['rwy']+180)%360)/10)
         rwy_str = f"{min(r1,r2):02d}/{max(r1,r2):02d}"
         m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
+        
+        # INCREASED POPUP FONT SIZE AND CONTRAST
         popup_html = f"""
-        <div style="width:550px; color:black !important; font-family:monospace; font-size:12px;">
-            <b style="color:#002366; font-size:14px;">{iata} STATUS</b>
-            <div style="margin-top:5px; padding:5px; border-left:5px solid {color}; background:#f9f9f9;">
-                <b style="color:#002366;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br>
-                <b>ACTUAL:</b> {actual_str}<br>
-                <b>FORECAST:</b> {forecast_str}
+        <div style="width:600px; color:black !important; font-family:sans-serif; font-size:16px; line-height:1.4;">
+            <b style="color:#002366; font-size:20px; border-bottom:2px solid #d6001a; display:block; padding-bottom:5px; margin-bottom:10px;">{iata} STATION STATUS</b>
+            <div style="margin-top:5px; padding:12px; border-left:8px solid {color}; background:#f4f4f4; border-radius:4px; box-shadow:inset 0 0 5px rgba(0,0,0,0.1);">
+                <b style="color:#002366; font-size:18px;">RWY {rwy_str} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else '#002366'}; font-weight:900; font-size:20px;">{xw} KT</span><br>
+                <div style="margin-top:8px;">
+                    <b>ACTUAL ALERT:</b> <span style="color:#d6001a; font-weight:bold;">{actual_str}</span><br>
+                    <b>FORECAST ALERT:</b> <span style="color:#eb8f34; font-weight:bold;">{forecast_str}</span>
+                </div>
             </div>
-            <hr>
-            <div style="display:flex; gap:10px;">
-                <div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>METAR</b><br>{m_bold}</div>
-                <div style="flex:1; background:#f0f0f0; padding:8px; border-radius:3px;"><b>TAF</b><br>{t_bold}</div>
+            <hr style="margin:15px 0;">
+            <div style="display:flex; gap:15px;">
+                <div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;">
+                    <b style="color:#002366; font-size:14px;">METAR DATA</b><br>
+                    <div style="font-family:monospace; font-size:15px; margin-top:5px;">{m_bold}</div>
+                </div>
+                <div style="flex:1; background:#ffffff; padding:12px; border-radius:5px; border:1px solid #ddd;">
+                    <b style="color:#002366; font-size:14px;">TAF DATA</b><br>
+                    <div style="font-family:monospace; font-size:15px; margin-top:5px;">{t_bold}</div>
+                </div>
             </div>
         </div>"""
         map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
@@ -214,10 +225,10 @@ for iata, info in base_airports.items():
 st.markdown(f'<div class="ba-header"><div>OCC WEATHER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
-    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1000, height=1000, key="map_v99")
+    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
+st_folium(m, width=1000, height=1000, key="map_v120")
 
-# 10. RESPONSIVE ALERTS (5-COLUMNS) [cite: 41]
+# 10. RESPONSIVE ALERTS (5-COLUMNS)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(5)
@@ -233,7 +244,7 @@ if taf_alerts:
             p_tag = "\nPROB" if d['prob'] else ""
             if st.button(f"**{iata}**\n{d['time']}\n{d['type']}{p_tag}", key=f"f_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
 
-# 11. ANALYSIS [cite: 42-44]
+# 11. ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})

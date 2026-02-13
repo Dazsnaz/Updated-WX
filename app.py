@@ -10,60 +10,49 @@ from datetime import datetime, timedelta
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (SIDEBAR CONTRAST & POPUP VISIBILITY)
+# 2. HUD STYLING (THE "BRUTE FORCE" CONTRAST FIX)
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* SIDEBAR UI FIX: FORCE NAVY TEXT ON WHITE BOXES */
-    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; }
-    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; font-size: 1rem !important; }
+    /* SIDEBAR BRUTE FORCE VISIBILITY */
+    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; }
+    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; }
     
-    /* Target dropdowns, inputs, and the list items inside the selector */
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="select"] span,
-    .stSelectbox div, 
-    .stTextInput input { 
-        background-color: white !important; 
-        color: #002366 !important; 
-        font-weight: bold !important; 
+    /* Force white backgrounds and navy text on ALL input elements in sidebar */
+    [data-testid="stSidebar"] div[data-baseweb="select"], 
+    [data-testid="stSidebar"] div[data-baseweb="base-input"],
+    [data-testid="stSidebar"] .stSelectbox div,
+    [data-testid="stSidebar"] input {
+        background-color: white !important;
+        color: #002366 !important;
     }
     
-    /* Target the actual popup list options */
-    div[role="listbox"] ul li { 
-        background-color: white !important; 
-        color: #002366 !important; 
+    /* Target the dropdown popup list specifically */
+    div[role="listbox"] * {
+        color: #002366 !important;
+        background-color: white !important;
+        font-weight: bold !important;
     }
-    
-    [data-testid="stFileUploader"] section { background-color: rgba(255,255,255,0.1) !important; border: 1px dashed white !important; }
 
-    /* CONCISE ALERT BUTTONS */
+    /* CONCISE ALERT TABS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
-        width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
+        width: 100%; text-transform: uppercase; font-size: 0.75rem !important; height: 45px !important; 
         line-height: 1.1 !important; white-space: nowrap !important; overflow: hidden;
         text-overflow: ellipsis; display: flex; align-items: center; justify-content: center; 
-        text-align: center; padding: 2px 10px !important;
+        padding: 2px 8px !important;
     }
     
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
-    
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. UTILITIES
-def calculate_dist(lat1, lon1, lat2, lon2):
-    R = 3440.065 
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 1)
-
 def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     if wind_dir is None or wind_spd is None or rwy_hdg is None: return 0
     angle = math.radians(wind_dir - rwy_hdg)
@@ -77,7 +66,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS)
+# 4. MASTER DATABASE (RE-INTEGRATED FULL LIST)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -99,42 +88,15 @@ base_airports = {
     "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False},
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
-    "SEN": {"icao": "EGMC", "lat": 51.571, "lon": 0.701, "rwy": 230, "fleet": "Cityflyer", "spec": False},
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "fleet": "Euroflyer", "spec": False},
-    "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
-    "FNC": {"icao": "LPMA", "lat": 32.694, "lon": -16.774, "rwy": 50, "fleet": "Euroflyer", "spec": True},
-    "NCE": {"icao": "LFMN", "lat": 43.665, "lon": 7.215, "rwy": 40, "fleet": "Euroflyer", "spec": False},
-    "VRN": {"icao": "LIPX", "lat": 45.396, "lon": 10.888, "rwy": 40, "fleet": "Euroflyer", "spec": False},
-    "OPO": {"icao": "LPPR", "lat": 41.242, "lon": -8.678, "rwy": 350, "fleet": "Euroflyer", "spec": False},
-    "LYS": {"icao": "LFLL", "lat": 45.726, "lon": 5.090, "rwy": 350, "fleet": "Euroflyer", "spec": False},
-    "SZG": {"icao": "LOWS", "lat": 47.794, "lon": 13.004, "rwy": 330, "fleet": "Euroflyer", "spec": False},
-    "BOD": {"icao": "LFBD", "lat": 44.828, "lon": -0.716, "rwy": 230, "fleet": "Euroflyer", "spec": False},
-    "GNB": {"icao": "LFLS", "lat": 45.363, "lon": 5.330, "rwy": 90, "fleet": "Euroflyer", "spec": False},
-    "TRN": {"icao": "LIMF", "lat": 45.202, "lon": 7.649, "rwy": 360, "fleet": "Euroflyer", "spec": False},
     "ALC": {"icao": "LEAL", "lat": 38.282, "lon": -0.558, "rwy": 100, "fleet": "Euroflyer", "spec": False},
-    "SVQ": {"icao": "LEZL", "lat": 37.418, "lon": -5.893, "rwy": 270, "fleet": "Euroflyer", "spec": False},
-    "RAK": {"icao": "GMMX", "lat": 31.606, "lon": -8.036, "rwy": 100, "fleet": "Euroflyer", "spec": False},
-    "AGA": {"icao": "GMAD", "lat": 30.325, "lon": -9.413, "rwy": 90, "fleet": "Euroflyer", "spec": False},
-    "SSH": {"icao": "HESH", "lat": 27.977, "lon": 34.394, "rwy": 40, "fleet": "Euroflyer", "spec": False},
-    "PFO": {"icao": "LCPH", "lat": 34.718, "lon": 32.486, "rwy": 290, "fleet": "Euroflyer", "spec": False},
-    "LCA": {"icao": "LCLK", "lat": 34.875, "lon": 33.625, "rwy": 220, "fleet": "Euroflyer", "spec": False},
-    "FUE": {"icao": "GCLP", "lat": 28.452, "lon": -13.864, "rwy": 10, "fleet": "Euroflyer", "spec": False},
-    "TFS": {"icao": "GCTS", "lat": 28.044, "lon": -16.572, "rwy": 70, "fleet": "Euroflyer", "spec": False},
-    "ACE": {"icao": "GCRR", "lat": 28.945, "lon": -13.605, "rwy": 30, "fleet": "Euroflyer", "spec": False},
-    "LPA": {"icao": "GCLP", "lat": 27.931, "lon": -15.386, "rwy": 30, "fleet": "Euroflyer", "spec": False},
-    "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
-    "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
-    "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. SESSION STATE
-if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
-
-# 6. SIDEBAR & SCHEDULE LOADING
+# 5. SIDEBAR & SCHEDULE LOADING
 with st.sidebar:
     st.title("🛠️ MISSION CONTROL")
-    uploaded_file = st.file_uploader("Upload Flight Schedule (report.csv)", type="csv")
+    uploaded_file = st.file_uploader("Upload report.csv", type="csv")
     
     flights_df = pd.DataFrame()
     selected_date = None
@@ -142,28 +104,30 @@ with st.sidebar:
         try:
             raw_content = uploaded_file.read().decode('utf-8')
             lines = raw_content.splitlines()
-            header_row = 0
+            header_idx = 0
             for i, line in enumerate(lines[:10]):
                 if "DATE" in line.upper() and "FLT" in line.upper():
-                    header_row = i
+                    header_idx = i
                     break
             uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, skiprows=header_row, on_bad_lines='skip')
+            df = pd.read_csv(uploaded_file, skiprows=header_idx, on_bad_lines='skip')
             df.columns = [c.strip().upper() for c in df.columns]
             flights_df = df.dropna(subset=['DATE', 'FLT']).reset_index(drop=True)
+            
             unique_dates = sorted(flights_df['DATE'].unique().tolist())
-            selected_date = st.selectbox("📅 MISSION DATE", unique_dates)
+            selected_date = st.selectbox("📅 SELECT DATE", unique_dates)
             flights_df = flights_df[flights_df['DATE'] == selected_date]
+            
+            st.success(f"Loaded {len(flights_df)} flights for {selected_date}")
         except Exception as e:
             st.error(f"Schedule Parse Error: {e}")
 
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
-    map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
     if st.button("🔄 REFRESH ALL DATA"): st.cache_data.clear(); st.rerun()
 
-# 7. DYNAMIC MISSION MAPPING
+# 6. DYNAMIC MISSION WINDOWS
 active_stations = {}
 op_windows = {}
 
@@ -175,16 +139,17 @@ if not flights_df.empty:
                 active_stations[port] = base_airports[port]
                 try:
                     t_str = str(row[time_col]).strip()
-                    f_dt = datetime.strptime(t_str, "%H:%M")
-                    # Operational Window: +/- 2 hours around schedule
-                    start_win, end_win = (f_dt - timedelta(hours=2)).hour, (f_dt + timedelta(hours=2)).hour
+                    # Calculate window start/end for today
+                    f_time = datetime.strptime(t_str, "%H:%M")
+                    win_start = (f_time - timedelta(hours=2)).time()
+                    win_end = (f_time + timedelta(hours=2)).time()
                     if port not in op_windows: op_windows[port] = []
-                    op_windows[port].append((start_win, end_win))
+                    op_windows[port].append((win_start, win_end))
                 except: pass
 else:
     active_stations = base_airports.copy()
 
-# 8. WEATHER ENGINE
+# 7. WEATHER ENGINE
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -204,12 +169,12 @@ def get_intel_global(airport_dict):
 
 weather_data = get_intel_global(active_stations)
 
-# 9. ANALYTICS & UI PROCESSING
-metar_alerts, taf_alerts, map_markers, green_stations = {}, {}, [], []
+# 8. ANALYTICS & UI
+metar_alerts, taf_alerts, map_markers = {}, {}, []
 
 for iata, info in active_stations.items():
     data = weather_data.get(iata)
-    if not data or data.get('status') == "offline": continue
+    if not data or data['status'] == "offline": continue
     
     is_shown = (info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)
     v_lim, c_lim = (1500, 500) if info.get('spec') else (800, 200)
@@ -224,42 +189,44 @@ for iata, info in active_stations.items():
     if m_cig < c_lim: m_issues.append("CLOUD")
     if xw >= 25: m_issues.append("XWIND")
     
-    # FORECAST CHECK (OP WINDOW SENSITIVE)
+    # FORECAST CHECK (SCHEDULE-WINDOW SENSITIVE)
     w_issues, w_time, w_prob = [], "", False
     for line in data.get("taf_lines", []):
-        is_relevant = True
         if iata in op_windows:
-            l_start, l_end = line.start_time.dt.hour, line.end_time.dt.hour
-            is_relevant = any(start <= l_end and end >= l_start for (start, end) in op_windows[iata])
-        if not is_relevant: continue
+            l_start, l_end = line.start_time.dt.time(), line.end_time.dt.time()
+            relevant = any( (s <= l_end and e >= l_start) for (s, e) in op_windows[iata])
+            if not relevant: continue
+        
         v = line.visibility.value if line.visibility else 9999
         c = 9999
         if line.clouds:
             for lyr in line.clouds:
                 if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
+        
         if v < v_lim or c < c_lim or "TSRA" in line.raw:
             w_issues = ["CLOUD"] if c < c_lim else ["VIS"]
             if "TSRA" in line.raw: w_issues.append("TSRA")
             w_prob, w_time = ("PROB" in line.raw), f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"
 
     if is_shown:
-        if m_issues: color = "#d6001a"; metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary"}
-        else: green_stations.append(iata)
+        if m_issues: 
+            color = "#d6001a"; actual_str = "/".join(m_issues)
+            metar_alerts[iata] = {"type": actual_str, "hex": "primary"}
         if w_issues:
             color = "#eb8f34" if color == "#008000" else color
+            forecast_str = f"{'+'.join(w_issues)}{' prob' if w_prob else ''} @ {w_time}"
             taf_alerts[iata] = {"type": "+".join(w_issues), "time": w_time, "prob": w_prob, "hex": "secondary"}
-        
+
         r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
-        m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
-        popup_html = f"""<div style="width:600px; color:black !important; font-family:monospace; font-size:14px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST:</b> {"+".join(w_issues) if w_issues else "NIL"}</div><hr><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+        popup_html = f"""<div style="width:600px; color:black !important; font-family:monospace; font-size:14px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b>RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>METAR</b><br>{bold_hazard(data['raw_m'])}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>TAF</b><br>{bold_hazard(data['raw_t'])}</div></div></div>"""
         map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # 10. UI RENDER
 st.markdown(f'<div class="ba-header"><div>OCC HUD - MISSION: {selected_date or "GLOBAL"}</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
-m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
+m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter", scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=700)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_v156")
+st_folium(m, width=1200, height=1200, key="map_v157")
 
 # 11. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -267,7 +234,7 @@ if metar_alerts:
     cols = st.columns(5)
     for i, (iata, d) in enumerate(metar_alerts.items()):
         with cols[i % 5]:
-            if st.button(f"{iata} NOW {d['type']}", key=f"m_{iata}", type="primary"): st.session_state.investigate_iata = iata
+            if st.button(f"{iata} NOW {d['type']}", key=f"m_{iata}", type="primary"): pass
 
 st.markdown('<div class="section-header">🟠 Forecast Alerts (TAF)</div>', unsafe_allow_html=True)
 if taf_alerts:
@@ -275,4 +242,4 @@ if taf_alerts:
     for i, (iata, d) in enumerate(taf_alerts.items()):
         with cols_f[i % 5]:
             p_tag = " prob" if d['prob'] else ""
-            if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
+            if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): pass

@@ -10,24 +10,31 @@ from datetime import datetime, timedelta
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (FIXED FOR VISIBILITY)
+# 2. HUD STYLING (SIDEBAR CONTRAST & POPUP VISIBILITY)
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* SIDEBAR HIGH-CONTRAST FIX */
+    /* SIDEBAR UI FIX: FORCE NAVY TEXT ON WHITE BOXES */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; }
-    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold; }
+    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; font-size: 1rem !important; }
     
-    /* Force White Boxes with Navy Text for all dropdowns and inputs */
-    div[data-baseweb="select"] > div, .stTextInput input, .stSelectbox div { 
+    /* Target dropdowns, inputs, and the list items inside the selector */
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="select"] span,
+    .stSelectbox div, 
+    .stTextInput input { 
         background-color: white !important; 
         color: #002366 !important; 
         font-weight: bold !important; 
     }
-    div[role="listbox"] { background-color: white !important; }
-    div[role="option"] { color: #002366 !important; }
+    
+    /* Target the actual popup list options */
+    div[role="listbox"] ul li { 
+        background-color: white !important; 
+        color: #002366 !important; 
+    }
     
     [data-testid="stFileUploader"] section { background-color: rgba(255,255,255,0.1) !important; border: 1px dashed white !important; }
 
@@ -43,6 +50,7 @@ st.markdown("""
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
+    
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
     </style>
@@ -69,7 +77,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. FULL MASTER DATABASE
+# 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -126,7 +134,7 @@ if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata
 # 6. SIDEBAR & SCHEDULE LOADING
 with st.sidebar:
     st.title("🛠️ MISSION CONTROL")
-    uploaded_file = st.file_uploader("Upload report.csv", type="csv")
+    uploaded_file = st.file_uploader("Upload Flight Schedule (report.csv)", type="csv")
     
     flights_df = pd.DataFrame()
     selected_date = None
@@ -144,7 +152,7 @@ with st.sidebar:
             df.columns = [c.strip().upper() for c in df.columns]
             flights_df = df.dropna(subset=['DATE', 'FLT']).reset_index(drop=True)
             unique_dates = sorted(flights_df['DATE'].unique().tolist())
-            selected_date = st.selectbox("📅 SELECT MISSION DATE", unique_dates)
+            selected_date = st.selectbox("📅 MISSION DATE", unique_dates)
             flights_df = flights_df[flights_df['DATE'] == selected_date]
         except Exception as e:
             st.error(f"Schedule Parse Error: {e}")
@@ -153,7 +161,7 @@ with st.sidebar:
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
-    if st.button("🔄 REFRESH HUD"): st.cache_data.clear(); st.rerun()
+    if st.button("🔄 REFRESH ALL DATA"): st.cache_data.clear(); st.rerun()
 
 # 7. DYNAMIC MISSION MAPPING
 active_stations = {}
@@ -168,6 +176,7 @@ if not flights_df.empty:
                 try:
                     t_str = str(row[time_col]).strip()
                     f_dt = datetime.strptime(t_str, "%H:%M")
+                    # Operational Window: +/- 2 hours around schedule
                     start_win, end_win = (f_dt - timedelta(hours=2)).hour, (f_dt + timedelta(hours=2)).hour
                     if port not in op_windows: op_windows[port] = []
                     op_windows[port].append((start_win, end_win))
@@ -201,12 +210,13 @@ metar_alerts, taf_alerts, map_markers, green_stations = {}, {}, [], []
 for iata, info in active_stations.items():
     data = weather_data.get(iata)
     if not data or data.get('status') == "offline": continue
+    
     is_shown = (info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)
     v_lim, c_lim = (1500, 500) if info.get('spec') else (800, 200)
     color, m_issues, actual_str, forecast_str = "#008000", [], "STABLE", "NIL"
     xw = calculate_xwind(data.get('w_dir', 0), max(data.get('w_spd', 0), data.get('w_gst', 0)), info['rwy'])
     
-    # 9.1 ACTUAL (METAR)
+    # METAR CHECK
     m_cig = 9999
     for lyr in data.get('m_clouds', []):
         if lyr.type in ['BKN', 'OVC'] and lyr.base: m_cig = min(m_cig, lyr.base * 100)
@@ -214,7 +224,7 @@ for iata, info in active_stations.items():
     if m_cig < c_lim: m_issues.append("CLOUD")
     if xw >= 25: m_issues.append("XWIND")
     
-    # 9.2 FORECAST (OP WINDOW SENSITIVE)
+    # FORECAST CHECK (OP WINDOW SENSITIVE)
     w_issues, w_time, w_prob = [], "", False
     for line in data.get("taf_lines", []):
         is_relevant = True
@@ -249,7 +259,7 @@ st.markdown(f'<div class="ba-header"><div>OCC HUD - MISSION: {selected_date or "
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=700)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_v155")
+st_folium(m, width=1200, height=1200, key="map_v156")
 
 # 11. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

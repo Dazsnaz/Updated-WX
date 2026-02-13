@@ -14,39 +14,20 @@ st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    
-    [data-testid="stTextArea"] textarea { 
-        color: #002366 !important; 
-        background-color: #ffffff !important; 
-        font-weight: bold; 
-        font-family: 'Courier New', monospace;
-    }
-    
+    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; font-family: 'Courier New', monospace; }
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
-    
-    /* V13.9 PRECISION BUTTON STYLING */
     .stButton > button { 
-        background-color: #005a9c !important; 
-        color: white !important; 
-        border: 1px solid white !important; 
-        width: 100%; 
-        text-transform: uppercase; 
-        font-size: 0.65rem !important; 
-        height: 75px !important; 
-        line-height: 1.2 !important; 
-        white-space: pre-wrap !important; 
-        display: flex; align-items: center; justify-content: center; text-align: center;
-        padding: 5px !important;
+        background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
+        width: 100%; text-transform: uppercase; font-size: 0.65rem !important; height: 75px !important; 
+        line-height: 1.2 !important; white-space: pre-wrap !important; display: flex; 
+        align-items: center; justify-content: center; text-align: center; padding: 5px !important;
     }
-    
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
-    
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
-    
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     </style>
@@ -67,13 +48,13 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
 
 def bold_hazard(text):
     if not text or text == "N/A": return text
-    text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text) # Vis digits
-    text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text) # Ceiling groups
+    text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text)
+    text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text)
     text = re.sub(r'(\b(FG|TSRA|SN|FZRA|FZDZ|RA|DZ|TS|VIS|CLOUD|FOG|XWIND|WIND)\b)', r'<b>\1</b>', text)
-    text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text) # Wind strings
+    text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# [cite_start]4. MASTER DATABASE [cite: 103-110]
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -92,7 +73,7 @@ base_airports = {
     "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.277, "rwy": 360, "fleet": "Cityflyer", "spec": False},
     "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "fleet": "Cityflyer", "spec": False},
     "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
-    "PMI": {"icao": "LEPA", "lat": 39.551, "2.738": 240, "rwy": 240, "fleet": "Cityflyer", "spec": False},
+    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False}, # FIXED KeyError Typo
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
     "SEN": {"icao": "EGMC", "lat": 51.571, "lon": 0.701, "rwy": 230, "fleet": "Cityflyer", "spec": False},
@@ -125,7 +106,6 @@ base_airports = {
 }
 
 # 5. SESSION STATE
-if 'manual_stations' not in st.session_state: st.session_state.manual_stations = {}
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
 # 6. SIDEBAR
@@ -142,7 +122,7 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. BACKGROUND DATA FETCH (STABLE CORE)
+# 7. BACKGROUND FETCH (STABLE CORE)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -160,7 +140,7 @@ def get_intel_global(airport_dict):
                         for lyr in line.clouds:
                             if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
                     
-                    # FORECAST SCAN
+                    # DEEP FORECAST SCAN
                     l_dir = line.wind_direction.value if line.wind_direction else info['rwy']
                     l_spd = line.wind_speed.value if line.wind_speed else 0
                     l_gst = line.wind_gust.value if line.wind_gust else 0
@@ -193,7 +173,7 @@ def get_intel_global(airport_dict):
         except: res[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
     return res
 
-weather_data = get_intel_global({**base_airports, **st.session_state.manual_stations})
+weather_data = get_intel_global({**base_airports, **st.session_state.get('manual_stations', {})})
 
 # 8. FILTER & UI LOOP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
@@ -236,7 +216,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WX HUD</div><div>{datetime.now().s
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_v139")
+st_folium(m, width=1200, height=1200, key="map_v120")
 
 # 10. RESPONSIVE ALERTS (V13.9 5-COLUMN GRID)
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -257,13 +237,13 @@ if taf_alerts:
 # 11. ANALYSIS
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
-    d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
+    d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0, "spec": False})
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     impact = "Standard operations. Monitor trends."
     if "VIS" in issue_desc or "CLOUD" in issue_desc: impact = "LVP procedures likely. CAT III currency required."
-    elif "FZRA" in issue_desc or "FZDZ" in issue_desc: impact = "Station safety limits breached. Embraer fleet restricted."
-    elif "XWIND" in issue_desc: impact = "Critical crosswind (>=25kt). Verify runway state and safety margins."
+    elif "FZRA" in issue_desc: impact = "Icing limits breached. Embraer fleet restricted."
+    elif "XWIND" in issue_desc: impact = "Critical crosswind component (>=25kt)."
 
     alt_iata, min_dist = "None", 9999
     for g in green_stations:

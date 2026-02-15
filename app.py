@@ -18,7 +18,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 280px !important; }
     [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; }
     
-    /* Input visibility fixes */
+    /* Input visibility */
     div[data-baseweb="select"] > div, .stSelectbox div, input {
         background-color: #ffffff !important; color: #002366 !important; font-weight: bold !important;
     }
@@ -36,20 +36,12 @@ st.markdown("""
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
     .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .reason-box h3, .reason-box p, .reason-box b, .reason-box small { color: #002366 !important; }
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. UTILITIES
-def calculate_dist(lat1, lon1, lat2, lon2):
-    R = 3440.065 
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi, dlambda = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return round(2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a)), 1)
-
 def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     if wind_dir is None or wind_spd is None or rwy_hdg is None: return 0
     angle = math.radians(wind_dir - rwy_hdg)
@@ -59,7 +51,7 @@ def bold_hazard(text):
     if not text or text == "N/A": return text
     text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text)
     text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text)
-    # Highlight Winter/Fog but NOT Rain/Drizzle
+    # Highlight specific hazards only (No Rain/Drizzle)
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|VIS|CLOUD|FOG|XWIND|WIND)\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
@@ -84,7 +76,6 @@ base_airports = {
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "ALC": {"icao": "LEAL", "lat": 38.282, "lon": -0.558, "rwy": 100, "fleet": "Euroflyer", "spec": False},
-    "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
 }
 
 # 5. SESSION STATE
@@ -103,7 +94,7 @@ with st.sidebar:
     st.markdown("📊 **FLEET X-WIND LIMITS**")
     st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. BACKGROUND FETCH (DEEP TAF SCAN)
+# 7. BACKGROUND FETCH
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -124,7 +115,7 @@ def get_intel_global(airport_dict):
                         for lyr in line.clouds:
                             if lyr.type in ['BKN', 'OVC'] and lyr.base: c = min(c, lyr.base * 100)
                     
-                    # WINTER/FOG TRIGGER LOGIC
+                    # WINTER/FOG TRIGGER (NO RA/DZ)
                     if any(x in l_raw for x in ["SN", "FZRA", "FZDZ"]): l_issues.append("WINTER")
                     if "FG" in l_raw: l_issues.append("FOG")
                     if "TS" in l_raw: l_issues.append("TSRA")
@@ -156,15 +147,19 @@ metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
     if not data: continue
+    
+    # Pre-Initialize popup variables to prevent NameError
     is_shown = (info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     color, m_issues, actual_str, forecast_str = "#008000", [], "STABLE", "NIL"
-    
+    xw = 0
+    r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
+
     if data['status'] == "online":
-        xw = calculate_xwind(data['w_dir'], max(data['w_spd'], data['w_gst']), info['rwy'])
+        xw = calculate_xwind(data.get('w_dir', 0), max(data.get('w_spd', 0), data.get('w_gst', 0)), info['rwy'])
         raw_m = data['raw_m'].upper()
         
-        # ACTUAL (No RA/DZ)
+        # ACTUAL ALERTS (Explicit Hazards Only)
         if any(x in raw_m for x in [" SN ", "-SN ", "FZRA", "FZDZ"]): m_issues.append("WINTER"); color = "#d6001a"
         if "FG" in raw_m: m_issues.append("FOG"); color = "#d6001a" if data['vis'] < v_lim else "#eb8f34"
         if data['vis'] < v_lim: m_issues.append("VIS"); color = "#d6001a"
@@ -172,8 +167,11 @@ for iata, info in base_airports.items():
         if xw >= 25: m_issues.append("XWIND"); color = "#d6001a"
         
         if is_shown:
-            if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary"}
+            if m_issues: 
+                actual_str = "/".join(m_issues)
+                metar_alerts[iata] = {"type": actual_str, "hex": "primary"}
             else: green_stations.append(iata)
+            
             if data['f_issues']:
                 p_tag = " prob" if data['f_prob'] else ""
                 forecast_str = f"{'+'.join(data['f_issues'])}{p_tag} @ {data['f_time']}"
@@ -181,17 +179,16 @@ for iata, info in base_airports.items():
                 if color == "#008000": color = "#eb8f34"
 
     if is_shown:
-        r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
-        m_bold, t_bold = bold_hazard(data['raw_m']), bold_hazard(data['raw_t'])
-        popup_html = f"""<div style="width:600px; color:black !important; font-family:monospace; font-size:14px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b>RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+        m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
+        popup_html = f"""<div style="width:600px; color:black !important; font-family:monospace; font-size:14px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>TAF</b><br>{t_bold}</div></div></div>"""
         map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # --- UI ---
-st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD (V14.2 ENGINE)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD (V14.2 STABLE ENGINE)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter", scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=700)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_v186")
+st_folium(m, width=1200, height=1200, key="map_v187")
 
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
@@ -216,8 +213,8 @@ if st.session_state.investigate_iata != "None":
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     impact = "Standard operations."
     if "VIS" in issue_desc or "CLOUD" in issue_desc: impact = "LVP procedures likely. CAT III currency required."
-    elif "WINTER" in issue_desc: impact = "Winter precip limits breached. Embraer fleet restricted."
-    elif "XWIND" in issue_desc: impact = "Critical crosswind (>=25kt). Verify runway state."
+    elif "WINTER" in issue_desc: impact = "Winter precipitation hazards. Embraer/Airbus de-icing required."
+    elif "XWIND" in issue_desc: impact = "Critical crosswind (>=25kt). Check runway state."
 
     alt_iata, min_dist = "None", 9999
     for g in green_stations:

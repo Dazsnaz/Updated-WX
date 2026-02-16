@@ -9,46 +9,52 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V25.0 - PERMANENT VISIBILITY REINFORCEMENT)
+# 2. HUD STYLING (RESTORING v20.2 FONT LOGIC + TACTICAL UPDATES)
 st.markdown("""
     <style>
-    /* GLOBAL BACKGROUND & BASE TEXT */
+    /* 2.1 GLOBAL THEME */
     .main { background-color: #001a33 !important; }
-    html, body, [class*="st-"] { color: white !important; }
+    html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* HEADER VISIBILITY */
-    .ba-header { 
-        background-color: #002366 !important; color: #ffffff !important; 
-        padding: 20px; border-radius: 8px; margin-bottom: 20px; 
-        border: 2px solid #d6001a; display: flex; justify-content: space-between;
+    /* 2.2 STRATEGY BRIEF RESTORATION (from v20.2) */
+    .reason-box { 
+        background-color: #ffffff !important; 
+        border: 1px solid #ddd; 
+        padding: 25px; 
+        border-radius: 5px; 
+        margin-top: 20px; 
+        border-top: 10px solid #d6001a; 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
-
-    /* SIDEBAR THEME - TACTICAL DARK GREY */
+    /* This specific block forces Navy text on all nested elements */
+    .reason-box h3, .reason-box p, .reason-box b, .reason-box small, 
+    .reason-box div, .reason-box span, .reason-box hr { 
+        color: #002366 !important; 
+    }
+    
+    /* 2.3 SIDEBAR & DROPDOWN VISIBILITY */
     [data-testid="stSidebar"] { background-color: #1e1e1e !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
-
-    /* SIDEBAR BUTTON FIX */
-    [data-testid="stSidebar"] .stButton > button {
-        background-color: #005a9c !important; color: white !important;
-        border: 1px solid white !important; font-weight: bold !important;
-    }
-
-    /* DROPDOWN & SELECTBOX FIX (FORCE NAVY ON WHITE) */
+    
+    /* Force Dropdowns to Navy on White */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
 
-    /* ALERT TABS (RED/AMBER BUTTONS) */
+    /* 2.4 HANDOVER LOG VISIBILITY */
+    [data-testid="stTextArea"] textarea { 
+        color: #002366 !important; 
+        background-color: #ffffff !important; 
+        font-weight: bold !important; 
+        font-family: 'Courier New', monospace !important;
+    }
+
+    /* 2.5 ALERT TABS */
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-
-    /* HANDOVER LOG FIX */
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
-
-    /* SECTION HEADERS */
-    .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     
-    /* MAP TOOLTIPS */
+    /* 2.6 SECTION HEADERS */
+    .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip { background: white !important; border: 2px solid #002366 !important; border-radius: 5px !important; opacity: 1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -240,7 +246,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v25")
+st_folium(m, width=1200, height=1200, key="map_final_v251")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -257,7 +263,7 @@ if taf_alerts:
             p_tag = " prob" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 11. STRATEGY BRIEF (NAVY BLUE LOCK)
+# 11. STRATEGY BRIEF (v20.2 RESTORATION)
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -270,21 +276,21 @@ if st.session_state.investigate_iata != "None":
             if dist < min_dist: min_dist = dist; alt_iata = g
             
     st.markdown(f"""
-    <div style="background-color: #ffffff !important; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-        <h3 style="color: #002366 !important; margin-top:0; font-weight: bold !important;">{iata} Strategy Brief</h3>
-        <div style="font-size:1.15rem; color: #002366 !important;">
-            <p style="color: #002366 !important;"><b style="color: #002366 !important;">Active Hazards:</b> <span style="color: #002366 !important;">{issue_desc}</span>. Live X-Wind <b style="color: #002366 !important;">{xw_val}kt</b>.</p>
-            <p style="color: #002366 !important;"><b style="color: #002366 !important;">Strategic Alternate:</b> <span style="color: #d6001a !important; font-weight: bold !important;">{alt_iata}</span> at <span style="color: #002366 !important;">{min_dist} NM</span>.</p>
+    <div class="reason-box">
+        <h3>{iata} Strategy Brief</h3>
+        <div>
+            <p><b>Active Hazards:</b> {issue_desc}. Live X-Wind <b>{xw_val}kt</b>.</p>
+            <p><b>Strategic Alternate:</b> <b style="color:#d6001a !important;">{alt_iata}</b> at {min_dist} NM.</p>
         </div>
-        <hr style="border: 0.5px solid #ddd;">
+        <hr>
         <div style="display:flex; gap:30px;">
             <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
-                <b style="color: #002366 !important; display:block; margin-bottom:10px; font-size:1.1rem !important;">LIVE METAR</b>
-                <div style="font-family:monospace; color: #002366 !important; line-height: 1.4 !important;">{bold_hazard(d.get('raw_m'))}</div>
+                <b>LIVE METAR</b>
+                <div style="font-family:monospace; line-height: 1.4 !important;">{bold_hazard(d.get('raw_m'))}</div>
             </div>
             <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
-                <b style="color: #002366 !important; display:block; margin-bottom:10px; font-size:1.1rem !important;">LIVE TAF</b>
-                <div style="font-family:monospace; color: #002366 !important; line-height: 1.4 !important;">{bold_hazard(d.get('raw_t'))}</div>
+                <b>LIVE TAF</b>
+                <div style="font-family:monospace; line-height: 1.4 !important;">{bold_hazard(d.get('raw_t'))}</div>
             </div>
         </div>
     </div>""", unsafe_allow_html=True)
@@ -294,4 +300,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_box", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_final", label_visibility="collapsed")

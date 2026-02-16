@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (HIGH CONTRAST & VISIBILITY)
+# 2. HUD STYLING (V14.2 BASE + SIDEBAR INJECTION)
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
@@ -18,19 +18,22 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; border-right: 2px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; }
     
-    /* GLOBAL SIDEBAR INPUT FIX: Force Navy on White */
-    [data-testid="stSidebar"] div[data-baseweb="select"] > div,
-    [data-testid="stSidebar"] div[data-baseweb="popover"] *,
-    [data-testid="stSidebar"] .stSelectbox div,
-    [data-testid="stSidebar"] input {
+    /* RADICAL DROPDOWN FIX: TARGETS BOTH CONTAINER AND LIST ITEMS */
+    div[data-baseweb="select"] > div, 
+    div[data-baseweb="select"] ul,
+    div[data-baseweb="select"] li,
+    div[data-baseweb="popover"] *,
+    .stSelectbox div {
         background-color: #ffffff !important; 
         color: #002366 !important; 
         font-weight: 900 !important;
+        fill: #002366 !important;
     }
     
-    /* Ensure the dropdown menu items themselves are navy */
-    div[data-baseweb="select"] ul { background-color: white !important; }
-    div[data-baseweb="select"] li { color: #002366 !important; font-weight: bold !important; }
+    /* Target the text specifically inside the selection box */
+    div[data-testid="stSelectbox"] span {
+        color: #002366 !important;
+    }
 
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
@@ -88,13 +91,12 @@ base_airports = {
     "GVA": {"icao": "LSGG", "lat": 46.237, "lon": 6.109, "rwy": 220, "fleet": "Cityflyer", "spec": False},
     "BER": {"icao": "EDDB", "lat": 52.362, "lon": 13.501, "rwy": 250, "fleet": "Cityflyer", "spec": False},
     "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.571, "rwy": 250, "fleet": "Cityflyer", "spec": False},
-    "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.277, "rwy": 360, "fleet": "Cityflyer", "spec": False},
     "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "fleet": "Cityflyer", "spec": False},
-    "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
-    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False},
     "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "JER": {"icao": "EGJJ", "lat": 49.208, "lon": -2.195, "rwy": 260, "fleet": "Euroflyer", "spec": False},
+    "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
     "FNC": {"icao": "LPMA", "lat": 32.694, "lon": -16.774, "rwy": 50, "fleet": "Euroflyer", "spec": True},
+    "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
 }
 
 # 5. SESSION STATE
@@ -107,6 +109,7 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
+    # Filters forced to High Contrast Navy
     hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
@@ -193,7 +196,7 @@ for iata, info in base_airports.items():
             taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
             if color == "#008000": color = "#eb8f34"
 
-    # APPLY ENHANCED TACTICAL FILTERS
+    # APPLY ENHANCED FILTERS
     all_summary = actual_str + forecast_str
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
@@ -213,7 +216,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_hazard_extended")
+st_folium(m, width=1200, height=1200, key="map_hazard_fix_v215")
 
 # 10. ALERTS [cite: 50-51]
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

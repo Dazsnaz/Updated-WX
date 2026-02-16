@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING
+# 2. HUD STYLING (V14.2 BASE + SIDEBAR VISIBILITY FIX)
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
@@ -18,6 +18,17 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 280px !important; border-right: 2px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; }
     
+    /* SIDEBAR INPUT VISIBILITY PATCH */
+    [data-testid="stSidebar"] div[data-baseweb="select"] > div, 
+    [data-testid="stSidebar"] .stSelectbox div, 
+    [data-testid="stSidebar"] input {
+        background-color: #ffffff !important; 
+        color: #002366 !important; 
+        font-weight: bold !important;
+    }
+    /* Force specific text color for selectbox values */
+    div[data-baseweb="select"] * { color: #002366 !important; }
+
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -120,15 +131,13 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
+    # Filters forced to High Contrast
     hazard_filter = st.selectbox("FILTER MAP BY HAZARD", ["Show All", "Any Alert (Amber/Red)", "XWIND", "FOG", "WINTER (Snow/FZRA)"])
     st.markdown("---")
     st.markdown("✈️ **FLEET DISPLAY**")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
-    st.markdown("---")
-    st.markdown("📊 **FLEET X-WIND LIMITS**")
-    st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td>A320/321</td><td>38 kt</td><td>33 kt</td></tr><tr><td>E190/170</td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
 # 7. BACKGROUND FETCH (DEEP WINTER TAF SCAN) [cite: 25-32]
 @st.cache_data(ttl=600)
@@ -201,8 +210,7 @@ for iata, info in base_airports.items():
         if xw >= 25: m_issues.append("XWIND"); color = "#d6001a"
         if data.get('w_gst', 0) > 25 and "XWIND" not in m_issues: m_issues.append("WIND"); color = "#eb8f34" if color == "#008000" else color
         
-        if m_issues: 
-            actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
+        if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
         else: green_stations.append(iata)
         if data['f_issues']:
             p_tag = " prob" if data['f_prob'] else ""
@@ -226,7 +234,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_hazard_filter")
+st_folium(m, width=1200, height=1200, key="map_hazard_visibility")
 
 # 10. ALERTS [cite: 50-51]
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -262,7 +270,7 @@ if st.session_state.investigate_iata != "None":
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief</h3><div style="font-size:1.1rem;"><p><b>Active Hazards: {issue_desc}</b>. Live X-Wind <b>{xw_val}kt</b>.</p><p><b>Impact:</b> {impact}</p><p style="color:#d6001a !important;"><b>Strategic Alternate:</b> {alt_iata} at {min_dist} NM.</p></div><hr><div style="display:flex; gap:30px;"><div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>METAR</b><br>{bold_hazard(d.get('raw_m'))}</div><div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>TAF</b><br>{bold_hazard(d.get('raw_t'))}</div></div></div>""", unsafe_allow_html=True)
     if st.button("Close Strategy Brief"): st.session_state.investigate_iata = "None"; st.rerun()
 
-# 12. HANDOVER LOG [cite: 56]
+# 12. HANDOVER LOG
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"

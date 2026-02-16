@@ -9,27 +9,40 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (REINFORCED CONTRAST FIX)
+# 2. HUD STYLING (V23.0 DARK TACTICAL SIDEBAR)
 st.markdown("""
     <style>
+    /* 2.1 GLOBAL ELEMENTS */
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* RADICAL DROPDOWN FIX: TARGETS BOTH CONTAINER AND LIST ITEMS */
-    div[data-testid="stSelectbox"] > div { background-color: white !important; }
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] * { 
-        color: #002366 !important; 
-        font-weight: 800 !important; 
+    /* 2.2 SIDEBAR - TACTICAL DARK GREY */
+    [data-testid="stSidebar"] { 
+        background-color: #2b2b2b !important; 
+        min-width: 300px !important; 
+        border-right: 3px solid #d6001a; 
     }
-    [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; }
+    [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold !important; font-size: 1.1rem !important; }
     
+    /* 2.3 DROPDOWN VISIBILITY (NAVY ON WHITE) */
+    /* Target the container, the placeholder, and the list items */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
+    div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 900 !important; }
+    
+    /* Target the dropdown menu list items */
+    div[data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; }
+    div[data-baseweb="popover"] li:hover { background-color: #e0e0e0 !important; }
+
+    /* 2.4 HANDOVER LOG & TEXTAREAS */
     [data-testid="stTextArea"] textarea { 
         color: #002366 !important; 
         background-color: #ffffff !important; 
         font-weight: bold !important; 
         font-family: 'Courier New', monospace !important;
+        border: 2px solid #d6001a !important;
     }
 
+    /* 2.5 ALERT TABS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -39,11 +52,10 @@ st.markdown("""
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
     
+    /* 2.6 STRATEGY BRIEF & TOOLTIPS */
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small, .reason-box div, .reason-box span { color: #002366 !important; }
     
-    .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
-    .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     .leaflet-tooltip { background: white !important; border: 2px solid #002366 !important; border-radius: 5px !important; opacity: 1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -69,7 +81,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS)
+# 4. MASTER DATABASE (FULL 47 STATIONS RESTORED)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -125,7 +137,7 @@ if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata
 
 # 6. SIDEBAR
 with st.sidebar:
-    st.title("🛠️ COMMAND SETTINGS")
+    st.title("🛠️ COMMAND HUD")
     if st.button("🔄 MANUAL DATA REFRESH"):
         st.cache_data.clear(); st.rerun()
     st.markdown("---")
@@ -136,7 +148,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH
+# 7. BACKGROUND FETCH (DEEP WINTER SCAN + TSRA FIX)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -163,7 +175,6 @@ def get_intel_global(airport_dict):
                     if any(x in l_raw for x in ["SN", "FG", "FZRA", "FZDZ"]): l_issues.append("WINTER/FOG")
                     if v < v_lim: l_issues.append("VIS")
                     if c < c_lim: l_issues.append("CLOUD")
-                    # SMART SCAN FOR TS (Avoids GCTS false positives)
                     if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
                     if l_xw >= 25: l_issues.append("XWIND")
                     if l_gst > 25: l_issues.append("WINDY")
@@ -205,7 +216,6 @@ for iata, info in base_airports.items():
         if any(x in raw_m for x in [" SN ", "-SN ", "FG ", "FZRA", "FZDZ"]): m_issues.append("WINTER/FOG"); color = "#d6001a"
         if data['vis'] < v_lim: m_issues.append("VIS"); color = "#d6001a"
         if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD"); color = "#d6001a"
-        # SMART SCAN FOR TS
         if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA"); color = "#d6001a"
         if xw >= 25: m_issues.append("XWIND"); color = "#d6001a"
         if data.get('w_gst', 0) > 25 and "XWIND" not in m_issues: m_issues.append("WINDY"); color = "#eb8f34" if color == "#008000" else color
@@ -230,7 +240,7 @@ for iata, info in base_airports.items():
     elif hazard_filter == "LOW CLOUD (<Limits)" and "CLOUD" not in all_summary: continue
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
-    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">Live X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # 9. UI RENDER
@@ -238,7 +248,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_hazard_fix_v221")
+st_folium(m, width=1200, height=1200, key="map_final_v23")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -259,7 +269,7 @@ if taf_alerts:
 # 11. STRATEGY BRIEF
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
-    d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0, "icao": "N/A"})
+    d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     alt_iata, min_dist = "None", 9999

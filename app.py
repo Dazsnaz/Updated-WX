@@ -9,69 +9,65 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V24.1 - TOTAL VISIBILITY INJECTION)
+# 2. HUD STYLING (V24.2 - FINAL VISIBILITY REINFORCEMENT)
 st.markdown("""
     <style>
-    /* 2.1 FORCE BACKGROUND AND BASE TEXT */
+    /* GLOBAL BACKGROUND & TEXT */
     .main { background-color: #001a33 !important; }
-    html, body, [data-testid="stAppViewContainer"] { background-color: #001a33 !important; color: white !important; }
+    html, body, [class*="st-"] { color: white !important; }
     
-    /* 2.2 FORCE HEADER VISIBILITY */
+    /* HEADER VISIBILITY */
     .ba-header { 
-        background-color: #002366 !important; 
-        color: #ffffff !important; 
-        padding: 25px; 
-        border-radius: 8px; 
-        margin-bottom: 25px; 
-        border: 2px solid #d6001a;
-        font-size: 2rem;
-        font-weight: bold;
-        display: flex;
-        justify-content: space-between;
+        background-color: #002366 !important; color: #ffffff !important; 
+        padding: 20px; border-radius: 8px; margin-bottom: 20px; 
+        border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
-    .ba-header div { color: #ffffff !important; }
 
-    /* 2.3 SIDEBAR - TACTICAL DARK GREY */
-    [data-testid="stSidebar"] { 
-        background-color: #1e1e1e !important; 
-        min-width: 320px !important; 
-        border-right: 3px solid #d6001a; 
-    }
-    [data-testid="stSidebar"] * { color: #ffffff !important; }
-    
-    /* 2.4 NUCLEAR DROPDOWN FIX (FORCE NAVY ON WHITE) */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] { 
-        background-color: white !important; 
-    }
-    div[data-testid="stSelectbox"] span, 
-    div[data-testid="stSelectbox"] div { 
-        color: #002366 !important; 
-        font-weight: 900 !important; 
-    }
-    /* Popover menu items */
-    div[data-baseweb="popover"] ul li {
-        background-color: white !important;
-        color: #002366 !important;
+    /* SIDEBAR THEME */
+    [data-testid="stSidebar"] { background-color: #1e1e1e !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
+    [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
+
+    /* SIDEBAR BUTTON (MANUAL REFRESH) FIX */
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #005a9c !important;
+        color: white !important;
+        border: 1px solid white !important;
         font-weight: bold !important;
     }
 
-    /* 2.5 TEXT AREA / HANDOVER FIX */
+    /* DROPDOWN & SELECTBOX FIX (NAVY ON WHITE) */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
+    div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
+    div[data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; }
+
+    /* ALERT TABS (RED/AMBER BUTTONS) FIX */
+    /* Secondary = Amber, Primary = Red */
+    .stButton > button[kind="secondary"] { 
+        background-color: #eb8f34 !important; 
+        color: white !important; 
+        border: 1px solid white !important;
+        font-weight: bold !important;
+    }
+    .stButton > button[kind="primary"] { 
+        background-color: #d6001a !important; 
+        color: white !important; 
+        border: 1px solid white !important;
+        font-weight: bold !important;
+    }
+    /* Default/Hover behavior for alert buttons */
+    .stButton > button:hover { border: 1px solid #d6001a !important; color: white !important; }
+
+    /* HANDOVER LOG FIX */
     [data-testid="stTextArea"] textarea { 
-        color: #002366 !important; 
-        background-color: #ffffff !important; 
-        font-weight: bold !important; 
-        font-family: 'Courier New', monospace !important;
+        color: #002366 !important; background-color: #ffffff !important; 
+        font-weight: bold !important; font-family: 'Courier New', monospace !important;
     }
 
-    /* 2.6 SECTION HEADERS */
+    /* SECTION HEADERS */
     .section-header { 
-        color: #ffffff !important; 
-        background-color: #002366;
-        padding: 10px;
-        border-left: 10px solid #d6001a;
-        font-weight: bold; 
-        font-size: 1.5rem; 
-        margin-top: 30px; 
+        color: #ffffff !important; background-color: #002366; 
+        padding: 10px; border-left: 10px solid #d6001a; 
+        font-weight: bold; font-size: 1.5rem; margin-top: 30px; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -164,7 +160,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH
+# 7. BACKGROUND FETCH (STABLE V14.2 ENGINE)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -187,6 +183,7 @@ def get_intel_global(airport_dict):
                     l_spd = line.wind_speed.value if line.wind_speed else 0
                     l_gst = line.wind_gust.value if line.wind_gust else 0
                     l_xw = calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy'])
+                    
                     if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
                     if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
                     if v < v_lim: l_issues.append("VIS")
@@ -194,6 +191,7 @@ def get_intel_global(airport_dict):
                     if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
                     if l_xw >= 25: l_issues.append("XWIND")
                     if l_gst > 25: l_issues.append("WINDY")
+                    
                     if l_issues:
                         if not w_issues or v < w_vis or c < w_cig or any(x in l_issues for x in ["WINTER","FOG"]):
                             w_vis, w_cig, w_issues, w_prob = v, c, l_issues, ("PROB" in l_raw)
@@ -224,6 +222,7 @@ for iata, info in base_airports.items():
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     color, m_issues, actual_str, forecast_str = "#008000", [], "STABLE", "NIL"
     xw = calculate_xwind(data.get('w_dir', 0), max(data.get('w_spd', 0), data.get('w_gst', 0)), info['rwy'])
+
     if data['status'] == "online":
         raw_m = data['raw_m'].upper()
         if re.search(r'\bFG\b', raw_m): m_issues.append("FOG"); color = "#d6001a"
@@ -233,6 +232,7 @@ for iata, info in base_airports.items():
         if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA"); color = "#d6001a"
         if xw >= 25: m_issues.append("XWIND"); color = "#d6001a"
         if data.get('w_gst', 0) > 25 and "XWIND" not in m_issues: m_issues.append("WINDY"); color = "#eb8f34" if color == "#008000" else color
+        
         if m_issues: actual_str = "/".join(m_issues); metar_alerts[iata] = {"type": actual_str, "hex": "primary" if color == "#d6001a" else "secondary"}
         else: green_stations.append(iata)
         if data['f_issues']:
@@ -241,6 +241,7 @@ for iata, info in base_airports.items():
             taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
             if color == "#008000": color = "#eb8f34"
 
+    # APPLY FILTERS
     all_summary = actual_str + forecast_str
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
@@ -260,7 +261,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v241")
+st_folium(m, width=1200, height=1200, key="map_final_v242")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

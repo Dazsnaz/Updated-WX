@@ -9,23 +9,26 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V23.1 - THE "CLEAN SLATE" VISIBILITY FIX)
+# 2. HUD STYLING (V24.0 - ULTIMATE VISIBILITY OVERHAUL)
 st.markdown("""
     <style>
+    /* 2.1 GLOBAL ELEMENTS */
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* SIDEBAR TACTICAL DARK GREY */
-    [data-testid="stSidebar"] { background-color: #2b2b2b !important; min-width: 300px !important; border-right: 3px solid #d6001a; }
+    /* 2.2 SIDEBAR - TACTICAL DARK GREY */
+    [data-testid="stSidebar"] { background-color: #2b2b2b !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold !important; font-size: 1.1rem !important; }
-    
-    /* FINAL DROPDOWN & INPUT VISIBILITY SOLUTION */
-    /* Target all select boxes and their menus */
-    div[data-baseweb="select"] * { color: #002366 !important; font-weight: 900 !important; }
-    div[role="listbox"] * { color: #002366 !important; font-weight: bold !important; background-color: white !important; }
-    .stSelectbox div[data-baseweb="select"] { background-color: white !important; border-radius: 4px; }
-    
-    /* HANDOVER LOG & TEXTAREAS */
+
+    /* NUCLEAR FONT FIX FOR SELECTBOXES */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; border-radius: 4px !important; }
+    div[data-testid="stSelectbox"] * { color: #002366 !important; -webkit-text-fill-color: #002366 !important; font-weight: 800 !important; }
+
+    /* Dropdown menu list items visibility */
+    div[role="listbox"] ul li, div[role="listbox"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
+    [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; }
+
+    /* 2.3 HANDOVER LOG VISIBILITY FIX */
     [data-testid="stTextArea"] textarea { 
         color: #002366 !important; 
         background-color: #ffffff !important; 
@@ -34,7 +37,7 @@ st.markdown("""
         border: 2px solid #d6001a !important;
     }
 
-    /* ALERT TABS */
+    /* 2.4 ALERT TABS & BUTTONS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -44,10 +47,11 @@ st.markdown("""
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
     
-    /* STRATEGY BRIEF */
+    /* 2.5 STRATEGY BRIEF */
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small, .reason-box div, .reason-box span { color: #002366 !important; }
     
+    /* 2.6 MAP TOOLTIPS */
     .leaflet-tooltip { background: white !important; border: 2px solid #002366 !important; border-radius: 5px !important; opacity: 1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -73,7 +77,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE
+# 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -134,14 +138,13 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
-    # Using Navy on White dropdowns
     hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH (DEEP WINTER SCAN + IMPROVED TRIGGERING)
+# 7. BACKGROUND FETCH (REFINED SCANNING LOGIC)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -165,7 +168,7 @@ def get_intel_global(airport_dict):
                     l_gst = line.wind_gust.value if line.wind_gust else 0
                     l_xw = calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy'])
                     
-                    # LOGIC REFINEMENT: WHOLE WORD FG & WINTER TRIGGERS
+                    # STANDALONE LOGIC TO PREVENT FALSE POSITIVES (like GCTS)
                     if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
                     if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
                     if v < v_lim: l_issues.append("VIS")
@@ -244,7 +247,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_hazard_fix_v231")
+st_folium(m, width=1200, height=1200, key="map_final_v24")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

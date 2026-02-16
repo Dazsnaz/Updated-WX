@@ -9,14 +9,14 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (RESTORING v20.2 FONT LOGIC + TACTICAL UPDATES)
+# 2. HUD STYLING (V25.2 - NUCLEAR CONTRAST LOCK)
 st.markdown("""
     <style>
     /* 2.1 GLOBAL THEME */
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* 2.2 STRATEGY BRIEF RESTORATION (from v20.2) */
+    /* 2.2 STRATEGY BRIEF - REWRITTEN FOR PERMANENT NAVY LOCK */
     .reason-box { 
         background-color: #ffffff !important; 
         border: 1px solid #ddd; 
@@ -26,17 +26,22 @@ st.markdown("""
         border-top: 10px solid #d6001a; 
         box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
-    /* This specific block forces Navy text on all nested elements */
-    .reason-box h3, .reason-box p, .reason-box b, .reason-box small, 
-    .reason-box div, .reason-box span, .reason-box hr { 
+    
+    /* THE FIX: Force Navy on ALL children of reason-box to stop white font inheritance */
+    .reason-box * { 
         color: #002366 !important; 
+    }
+    
+    /* Keep the strategic alternate highlight red even inside the navy box */
+    .reason-box .alt-highlight {
+        color: #d6001a !important;
+        font-weight: bold !important;
     }
     
     /* 2.3 SIDEBAR & DROPDOWN VISIBILITY */
     [data-testid="stSidebar"] { background-color: #1e1e1e !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
     
-    /* Force Dropdowns to Navy on White */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
@@ -226,7 +231,6 @@ for iata, info in base_airports.items():
             taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
             if color == "#008000": color = "#eb8f34"
 
-    # APPLY FILTERS
     all_summary = actual_str + forecast_str
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
@@ -238,7 +242,7 @@ for iata, info in base_airports.items():
     elif hazard_filter == "LOW CLOUD (<Limits)" and "CLOUD" not in all_summary: continue
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
-    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">Live X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # 9. UI RENDER
@@ -246,7 +250,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v251")
+st_folium(m, width=1200, height=1200, key="map_final_v252")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -263,7 +267,7 @@ if taf_alerts:
             p_tag = " prob" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 11. STRATEGY BRIEF (v20.2 RESTORATION)
+# 11. STRATEGY BRIEF (v25.2 ULTIMATE NAVY LOCK)
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -280,7 +284,7 @@ if st.session_state.investigate_iata != "None":
         <h3>{iata} Strategy Brief</h3>
         <div>
             <p><b>Active Hazards:</b> {issue_desc}. Live X-Wind <b>{xw_val}kt</b>.</p>
-            <p><b>Strategic Alternate:</b> <b style="color:#d6001a !important;">{alt_iata}</b> at {min_dist} NM.</p>
+            <p><b>Strategic Alternate:</b> <span class="alt-highlight">{alt_iata}</span> at {min_dist} NM.</p>
         </div>
         <hr>
         <div style="display:flex; gap:30px;">
@@ -300,4 +304,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*35 + "\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_final", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_final_2", label_visibility="collapsed")

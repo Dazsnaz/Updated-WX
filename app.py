@@ -9,15 +9,16 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (STABLE 14.2 BASE)
+# 2. HUD STYLING (UNIFIED INTERFACE)
 st.markdown("""
     <style>
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; font-family: 'Courier New', monospace; }
-    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; }
+    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 250px !important; border-right: 2px solid #d6001a; }
     [data-testid="stSidebar"] .stTextInput input { color: #002366 !important; background-color: white !important; font-weight: bold; }
     
+    /* CONCISE ALERT BUTTONS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -29,12 +30,20 @@ st.markdown("""
     .ba-header { background-color: #002366; padding: 20px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
-    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
-    .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
     
-    /* Center the hover tooltip better */
-    .leaflet-tooltip { background: white !important; border: 2px solid #002366 !important; border-radius: 5px !important; padding: 0 !important; }
+    /* STRATEGY & MAP INTERFACE FIXES */
+    .reason-box { background-color: #ffffff; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; color: #002366 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .reason-box h3, .reason-box p, .reason-box b { color: #002366 !important; }
+    
+    /* Force tooltips to use the same background as popups */
+    .leaflet-tooltip { 
+        background-color: white !important; 
+        border: 2px solid #002366 !important; 
+        border-radius: 6px !important; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        padding: 0 !important; 
+        opacity: 1 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,12 +64,11 @@ def bold_hazard(text):
     if not text or text == "N/A": return text
     text = re.sub(r'(\b\d{4}\b)', r'<b>\1</b>', text)
     text = re.sub(r'((BKN|OVC)\d{3})', r'<b>\1</b>', text)
-    # Winter & Wind Hazards Bolding
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|VIS|CLOUD|FOG|XWIND|WIND)\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. FULL MASTER DATABASE (STABLE 47)
+# 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -125,9 +133,9 @@ with st.sidebar:
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
     st.markdown("---")
     st.markdown("📊 **FLEET X-WIND LIMITS**")
-    st.markdown("""<table class="limits-table"><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td><b>A320/321</b></td><td>38 kt</td><td>33 kt</td></tr><tr><td><b>E190/170</b></td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
+    st.markdown("""<table style='width:100%; font-size:0.8rem; color:white;'><tr><th>FLEET</th><th>DRY</th><th>WET</th></tr><tr><td>A320/321</td><td>38 kt</td><td>33 kt</td></tr><tr><td>E190/170</td><td>30 kt</td><td>25 kt</td></tr></table>""", unsafe_allow_html=True)
 
-# 7. BACKGROUND FETCH (DEEP WINTER SCAN)
+# 7. BACKGROUND FETCH (STABLE ENGINE)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -153,7 +161,6 @@ def get_intel_global(airport_dict):
                     l_gst = line.wind_gust.value if line.wind_gust else 0
                     l_xw = calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy'])
                     
-                    # WINTER TRIGGERS + WIND/VIS
                     if any(x in l_raw for x in ["SN", "FG", "FZRA", "FZDZ"]): l_issues.append("WINTER/FOG")
                     if v < v_lim: l_issues.append("VIS")
                     if c < c_lim: l_issues.append("CLOUD")
@@ -177,8 +184,7 @@ def get_intel_global(airport_dict):
             if m.data and m.data.clouds:
                 for lyr in m.data.clouds:
                     if lyr.type in ['BKN', 'OVC'] and lyr.base: res[iata]["cig"] = min(res[iata].get("cig", 9999), lyr.base * 100)
-        except: 
-            res[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
+        except: res[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
     return res
 
 weather_data = get_intel_global(base_airports)
@@ -191,7 +197,6 @@ for iata, info in base_airports.items():
     is_shown = (info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)
     if not is_shown: continue
 
-    # Variable Initialization to prevent NameError
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
     color, m_issues, actual_str, forecast_str = "#008000", [], "STABLE", "NIL"
     xw = 0
@@ -201,7 +206,6 @@ for iata, info in base_airports.items():
         xw = calculate_xwind(data.get('w_dir', 0), max(data.get('w_spd', 0), data.get('w_gst', 0)), info['rwy'])
         raw_m = data['raw_m'].upper()
         
-        # WINTER + WIND (IGNORE RA/DZ)
         if any(x in raw_m for x in [" SN ", "-SN ", "FG ", "FZRA", "FZDZ"]): m_issues.append("WINTER/FOG"); color = "#d6001a"
         if data['vis'] < v_lim: m_issues.append("VIS"); color = "#d6001a"
         if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD"); color = "#d6001a"
@@ -221,8 +225,8 @@ for iata, info in base_airports.items():
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    # 8.2 POPUP HTML (CENTRAL ALIGNMENT)
-    popup_html = f"""<div style="width:600px; color:black !important; font-family:monospace; font-size:14px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+    # 8.2 POPUP HTML (SHARED BY HOVER AND CLICK)
+    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {r1:02d}/{r2:02d} Live X-Wind:</b> <span style="color:{'#d6001a' if xw >= 25 else 'black'}; font-weight:bold;">{xw} KT</span><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px; white-space:pre-wrap;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; font-size:14px; white-space:pre-wrap;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
 # --- UI RENDER ---
@@ -231,17 +235,14 @@ m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter"
 
 for mkr in map_markers:
     folium.CircleMarker(
-        location=[mkr['lat'], mkr['lon']], 
-        radius=7, 
-        color=mkr['color'], 
-        fill=True, 
-        # Click to stay pinned
-        popup=folium.Popup(mkr['popup'], max_width=700),
-        # Hover to appear centrally above
+        location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True,
+        # CLICK POPUP (Pinned)
+        popup=folium.Popup(mkr['popup'], max_width=650),
+        # HOVER TOOLTIP (Centered Top)
         tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)
     ).add_to(m)
 
-st_folium(m, width=1200, height=1200, key="map_hover_centered_v201")
+st_folium(m, width=1200, height=1200, key="map_unified_v202")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -269,7 +270,7 @@ if st.session_state.investigate_iata != "None":
     impact = "Standard operations. Monitor trends."
     if "VIS" in issue_desc or "CLOUD" in issue_desc: impact = "LVP procedures likely. CAT III currency required."
     elif "WINTER" in issue_desc: impact = "Winter precip limits breached. Embraer/Airbus de-icing required."
-    elif "XWIND" in issue_desc: impact = f"Critical crosswind ({xw_val}kt) exceeds wet limits. Verify runway state."
+    elif "XWIND" in issue_desc: impact = f"Critical crosswind ({xw_val}kt) exceeds limits. Verify runway state."
 
     alt_iata, min_dist = "None", 9999
     for g in green_stations:

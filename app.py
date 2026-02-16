@@ -6,25 +6,45 @@ import math
 import re
 from datetime import datetime
 
-# 1. PAGE CONFIG [cite: 1]
+# 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (REINFORCED CONTRAST FIX) [cite: 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+# 2. HUD STYLING (V14.2 BASE + RADICAL CSS INJECTION)
 st.markdown("""
     <style>
+    /* GLOBAL DARK THEME ELEMENTS */
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold; font-family: 'Courier New', monospace; }
-    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 280px !important; border-right: 2px solid #d6001a; }
     
-    /* REINFORCED SIDEBAR DROPDOWN FIX */
-    div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 900 !important; }
-    div[data-baseweb="select"] > div { background-color: white !important; }
-    div[data-baseweb="popover"] ul { background-color: white !important; }
-    div[data-baseweb="popover"] li { color: #002366 !important; background-color: white !important; }
-    div[data-baseweb="popover"] li:hover { background-color: #f0f2f6 !important; }
+    /* SIDEBAR BASE */
+    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 300px !important; border-right: 2px solid #d6001a; }
+    [data-testid="stSidebar"] label p { color: white !important; font-weight: bold !important; }
+    
+    /* --- THE NUCLEAR DROPDOWN FONT FIX --- */
+    /* This targets the selectbox container, the text inside it, and the dropdown menu list */
+    
+    /* 1. Force the selection box and text to be Navy on White */
+    div[data-testid="stSelectbox"] > div { background-color: white !important; }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] * { 
+        color: #002366 !important; 
+        font-weight: 800 !important; 
+    }
+    
+    /* 2. Target the 'Virtual List' items in the dropdown menu when it opens */
+    [data-baseweb="popover"] ul { background-color: white !important; }
+    [data-baseweb="popover"] li { 
+        color: #002366 !important; 
+        background-color: white !important; 
+        font-weight: bold !important;
+    }
+    /* 3. Handle the hover state on the dropdown list */
+    [data-baseweb="popover"] li:hover { background-color: #f0f2f6 !important; }
+    
+    /* 4. Force placeholders and icons */
+    div[data-baseweb="select"] svg { fill: #002366 !important; }
+    
+    /* --- END DROPDOWN FIX --- */
 
-    /* ALERT TABS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -35,7 +55,7 @@ st.markdown("""
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
     
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .reason-box h3, .reason-box p, .reason-box b, .reason-box small, .reason-box div { color: #002366 !important; }
+    .reason-box h3, .reason-box p, .reason-box b, .reason-box small, .reason-box div, .reason-box span { color: #002366 !important; }
     
     .limits-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 10px; color: white !important; }
     .limits-table td, .limits-table th { border: 1px solid rgba(255,255,255,0.2); padding: 4px; text-align: left; }
@@ -65,7 +85,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS) [cite: 14-21]
+# 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -119,7 +139,7 @@ base_airports = {
 # 5. SESSION STATE
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 6. SIDEBAR [cite: 22]
+# 6. SIDEBAR
 with st.sidebar:
     st.title("🛠️ COMMAND SETTINGS")
     if st.button("🔄 MANUAL DATA REFRESH"):
@@ -132,7 +152,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH (DEEP WINTER TAF SCAN) [cite: 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+# 7. BACKGROUND FETCH (STABLE ENGINE)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -183,7 +203,7 @@ def get_intel_global(airport_dict):
 
 weather_data = get_intel_global(base_airports)
 
-# 8. FILTER & UI LOOP [cite: 33, 34, 35, 36, 37, 38, 39, 40, 41]
+# 8. FILTER & UI LOOP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
@@ -212,7 +232,7 @@ for iata, info in base_airports.items():
             taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
             if color == "#008000": color = "#eb8f34"
 
-    # APPLY TACTICAL FILTERS
+    # SIDEBAR TACTICAL FILTERING
     all_summary = actual_str + forecast_str
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
@@ -227,14 +247,14 @@ for iata, info in base_airports.items():
     popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {actual_str}<br><b>FORECAST:</b> {forecast_str}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html})
 
-# 9. UI RENDER [cite: 42, 43, 44, 45, 46, 47, 48, 49]
+# 9. UI RENDER
 st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_hazard_fix_v218")
+st_folium(m, width=1200, height=1200, key="map_hazard_fix_v219")
 
-# 10. ALERTS [cite: 50, 51]
+# 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(5)
@@ -250,7 +270,7 @@ if taf_alerts:
             p_tag = " prob" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 11. STRATEGY BRIEF [cite: 52, 53, 54, 55]
+# 11. STRATEGY BRIEF
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0, "icao": "N/A"})

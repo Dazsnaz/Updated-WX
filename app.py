@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (FORCE VISIBILITY REINFORCEMENT)
+# 2. HUD STYLING
 st.markdown("""
     <style>
     /* GLOBAL BACKGROUND & TEXT */
@@ -140,7 +140,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH (DEEP WINTER SCAN + STANDALONE TRIGGER LOGIC)
+# 7. BACKGROUND FETCH
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -163,7 +163,6 @@ def get_intel_global(airport_dict):
                     l_spd = line.wind_speed.value if line.wind_speed else 0
                     l_gst = line.wind_gust.value if line.wind_gust else 0
                     l_xw = calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy'])
-                    
                     if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
                     if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
                     if v < v_lim: l_issues.append("VIS")
@@ -171,7 +170,6 @@ def get_intel_global(airport_dict):
                     if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
                     if l_xw >= 25: l_issues.append("XWIND")
                     if l_gst > 25: l_issues.append("WINDY")
-                    
                     if l_issues:
                         if not w_issues or v < w_vis or c < w_cig or any(x in l_issues for x in ["WINTER","FOG"]):
                             w_vis, w_cig, w_issues, w_prob = v, c, l_issues, ("PROB" in l_raw)
@@ -238,7 +236,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v245")
+st_folium(m, width=1200, height=1200, key="map_final_v246")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -255,7 +253,7 @@ if taf_alerts:
             p_tag = " prob" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 11. STRATEGY BRIEF (NAVY ON WHITE LOCK)
+# 11. STRATEGY BRIEF (RE-ENFORCED NAVY ON WHITE)
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -267,22 +265,23 @@ if st.session_state.investigate_iata != "None":
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             if dist < min_dist: min_dist = dist; alt_iata = g
             
+    # THE FORCE-NAVY BLOCK
     st.markdown(f"""
-    <div style="background-color: #ffffff !important; color: #002366 !important; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-        <h3 style="color: #002366 !important; margin-top:0;">{iata} Strategy Brief</h3>
-        <div style="font-size:1.1rem; color: #002366 !important;">
-            <p style="color: #002366 !important;"><b style="color: #002366 !important;">Active Hazards:</b> {issue_desc}. Live X-Wind <b style="color: #002366 !important;">{xw_val}kt</b>.</p>
-            <p style="color:#d6001a !important;"><b style="color:#002366 !important;">Strategic Alternate:</b> {alt_iata} at {min_dist} NM.</p>
+    <div style="background-color: #ffffff !important; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        <h3 style="color: #002366 !important; margin-top:0; font-weight: bold !important;">{iata} Strategy Brief</h3>
+        <div style="font-size:1.15rem; color: #002366 !important;">
+            <p style="color: #002366 !important;"><b style="color: #002366 !important;">Active Hazards:</b> <span style="color: #002366 !important;">{issue_desc}</span>. Live X-Wind <b style="color: #002366 !important;">{xw_val}kt</b>.</p>
+            <p style="color: #002366 !important;"><b style="color: #002366 !important;">Strategic Alternate:</b> <span style="color: #d6001a !important; font-weight: bold !important;">{alt_iata}</span> at <span style="color: #002366 !important;">{min_dist} NM</span>.</p>
         </div>
         <hr style="border: 0.5px solid #ddd;">
         <div style="display:flex; gap:30px;">
-            <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; color: #002366 !important;">
-                <b style="color: #002366 !important; display:block; margin-bottom:10px;">METAR</b>
-                <div style="font-family:monospace; color: #002366 !important;">{bold_hazard(d.get('raw_m'))}</div>
+            <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
+                <b style="color: #002366 !important; display:block; margin-bottom:10px; font-size:1.1rem !important;">LIVE METAR</b>
+                <div style="font-family:monospace; color: #002366 !important; line-height: 1.4 !important;">{bold_hazard(d.get('raw_m'))}</div>
             </div>
-            <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; color: #002366 !important;">
-                <b style="color: #002366 !important; display:block; margin-bottom:10px;">TAF</b>
-                <div style="font-family:monospace; color: #002366 !important;">{bold_hazard(d.get('raw_t'))}</div>
+            <div style="flex:1; padding:15px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
+                <b style="color: #002366 !important; display:block; margin-bottom:10px; font-size:1.1rem !important;">LIVE TAF</b>
+                <div style="font-family:monospace; color: #002366 !important; line-height: 1.4 !important;">{bold_hazard(d.get('raw_t'))}</div>
             </div>
         </div>
     </div>""", unsafe_allow_html=True)

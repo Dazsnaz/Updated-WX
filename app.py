@@ -9,31 +9,23 @@ from datetime import datetime
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V23.0 DARK TACTICAL SIDEBAR)
+# 2. HUD STYLING (V23.1 - THE "CLEAN SLATE" VISIBILITY FIX)
 st.markdown("""
     <style>
-    /* 2.1 GLOBAL ELEMENTS */
     .section-header { color: #002366 !important; font-weight: bold; font-size: 1.5rem; margin-top: 20px; border-bottom: 2px solid #d6001a; padding-bottom: 5px; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* 2.2 SIDEBAR - TACTICAL DARK GREY */
-    [data-testid="stSidebar"] { 
-        background-color: #2b2b2b !important; 
-        min-width: 300px !important; 
-        border-right: 3px solid #d6001a; 
-    }
+    /* SIDEBAR TACTICAL DARK GREY */
+    [data-testid="stSidebar"] { background-color: #2b2b2b !important; min-width: 300px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold !important; font-size: 1.1rem !important; }
     
-    /* 2.3 DROPDOWN VISIBILITY (NAVY ON WHITE) */
-    /* Target the container, the placeholder, and the list items */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
-    div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 900 !important; }
+    /* FINAL DROPDOWN & INPUT VISIBILITY SOLUTION */
+    /* Target all select boxes and their menus */
+    div[data-baseweb="select"] * { color: #002366 !important; font-weight: 900 !important; }
+    div[role="listbox"] * { color: #002366 !important; font-weight: bold !important; background-color: white !important; }
+    .stSelectbox div[data-baseweb="select"] { background-color: white !important; border-radius: 4px; }
     
-    /* Target the dropdown menu list items */
-    div[data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; }
-    div[data-baseweb="popover"] li:hover { background-color: #e0e0e0 !important; }
-
-    /* 2.4 HANDOVER LOG & TEXTAREAS */
+    /* HANDOVER LOG & TEXTAREAS */
     [data-testid="stTextArea"] textarea { 
         color: #002366 !important; 
         background-color: #ffffff !important; 
@@ -42,7 +34,7 @@ st.markdown("""
         border: 2px solid #d6001a !important;
     }
 
-    /* 2.5 ALERT TABS */
+    /* ALERT TABS */
     .stButton > button { 
         background-color: #005a9c !important; color: white !important; border: 1px solid white !important; 
         width: 100%; text-transform: uppercase; font-size: 0.72rem !important; height: 50px !important; 
@@ -52,7 +44,7 @@ st.markdown("""
     div.stButton > button[kind="primary"] { background-color: #d6001a !important; }
     div.stButton > button[kind="secondary"] { background-color: #eb8f34 !important; }
     
-    /* 2.6 STRATEGY BRIEF & TOOLTIPS */
+    /* STRATEGY BRIEF */
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box h3, .reason-box p, .reason-box b, .reason-box small, .reason-box div, .reason-box span { color: #002366 !important; }
     
@@ -81,7 +73,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{3}\d{2}(G\d{2})?KT\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS RESTORED)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -142,13 +134,14 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
+    # Using Navy on White dropdowns
     hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. BACKGROUND FETCH (DEEP WINTER SCAN + TSRA FIX)
+# 7. BACKGROUND FETCH (DEEP WINTER SCAN + IMPROVED TRIGGERING)
 @st.cache_data(ttl=600)
 def get_intel_global(airport_dict):
     res = {}
@@ -172,7 +165,9 @@ def get_intel_global(airport_dict):
                     l_gst = line.wind_gust.value if line.wind_gust else 0
                     l_xw = calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy'])
                     
-                    if any(x in l_raw for x in ["SN", "FG", "FZRA", "FZDZ"]): l_issues.append("WINTER/FOG")
+                    # LOGIC REFINEMENT: WHOLE WORD FG & WINTER TRIGGERS
+                    if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
+                    if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
                     if v < v_lim: l_issues.append("VIS")
                     if c < c_lim: l_issues.append("CLOUD")
                     if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
@@ -180,7 +175,7 @@ def get_intel_global(airport_dict):
                     if l_gst > 25: l_issues.append("WINDY")
                     
                     if l_issues:
-                        if not w_issues or v < w_vis or c < w_cig or "WINTER" in str(l_issues):
+                        if not w_issues or v < w_vis or c < w_cig or any(x in l_issues for x in ["WINTER","FOG"]):
                             w_vis, w_cig, w_issues, w_prob = v, c, l_issues, ("PROB" in l_raw)
                             w_time = f"{line.start_time.dt.strftime('%H')}-{line.end_time.dt.strftime('%H')}Z"
             res[iata] = {
@@ -213,7 +208,8 @@ for iata, info in base_airports.items():
 
     if data['status'] == "online":
         raw_m = data['raw_m'].upper()
-        if any(x in raw_m for x in [" SN ", "-SN ", "FG ", "FZRA", "FZDZ"]): m_issues.append("WINTER/FOG"); color = "#d6001a"
+        if re.search(r'\bFG\b', raw_m): m_issues.append("FOG"); color = "#d6001a"
+        if re.search(r'\bSN\b|\bFZ', raw_m): m_issues.append("WINTER"); color = "#d6001a"
         if data['vis'] < v_lim: m_issues.append("VIS"); color = "#d6001a"
         if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD"); color = "#d6001a"
         if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA"); color = "#d6001a"
@@ -228,7 +224,7 @@ for iata, info in base_airports.items():
             taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
             if color == "#008000": color = "#eb8f34"
 
-    # APPLY TACTICAL FILTERS
+    # APPLY FILTERS
     all_summary = actual_str + forecast_str
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
@@ -248,7 +244,7 @@ st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(mkr['popup'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v23")
+st_folium(m, width=1200, height=1200, key="map_hazard_fix_v231")
 
 # 10. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

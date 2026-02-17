@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (NAVY LOCK + CLIPPING FIX)
+# 2. HUD STYLING
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -45,7 +45,7 @@ st.markdown("""
     
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     
-    /* UNIFIED HOVER/CLICK OVERRIDE - FIXED CLIPPING */
+    /* TOOLTIP WRAPPING FIX */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { 
         background: white !important; 
         border: 2px solid #002366 !important; 
@@ -206,12 +206,14 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                 if l_v < v_lim: l_issues.append("VIS")
                 if l_c < c_lim: l_issues.append("CLOUD")
                 if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
+                
                 l_dir = line.wind_direction.value if (line.wind_direction and line.wind_direction.value) else info['rwy']
                 l_spd = line.wind_speed.value if (line.wind_speed and line.wind_speed.value) else 0
                 l_gst = line.wind_gust.value if (line.wind_gust and line.wind_gust.value) else 0
                 peak = max(l_spd, l_gst)
                 if calculate_xwind(l_dir, peak, info['rwy']) >= xw_threshold: l_issues.append("XWIND")
                 elif peak > 25: l_issues.append("WINDY")
+                
                 if l_issues:
                     for iss in l_issues:
                         if iss not in w_issues: w_issues.append(iss)
@@ -266,15 +268,21 @@ for iata, info in base_airports.items():
     elif hazard_filter != "Show All Network" and hazard_filter not in all_summary: continue
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
-    
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.6</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
-# FIXED ZOOM POSITION
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.7</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+# UNIVERSAL ZOOM FIX
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False, zoom_control=False)
-folium.ZoomControl(position='bottomleft').add_to(m)
+folium.TileLayer(no_wrap=True).add_to(m) # Added stability for panning
+st.markdown("<style>.leaflet-bottom.leaflet-left { margin-bottom: 20px !important; }</style>", unsafe_allow_html=True)
+
+# Correct Zoom Placement
+folium.map.CustomControl(
+    '<div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out">-</a></div>',
+    position='bottomleft'
+).add_to(m)
 
 for mkr in map_markers:
     folium.CircleMarker(
@@ -282,7 +290,7 @@ for mkr in map_markers:
         popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v296")
+st_folium(m, width=1200, height=1200, key="map_stable_v297")
 
 # 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -305,6 +313,7 @@ if st.session_state.investigate_iata != "None":
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
+    
     alt_list = []
     for g in green_stations:
         if g != iata:
@@ -315,14 +324,34 @@ if st.session_state.investigate_iata != "None":
             alt_xw = calculate_xwind(a_dir, a_spd, base_airports[g]['rwy'])
             score = (dist * 0.6) + (alt_xw * 2.5)
             alt_list.append({"iata": g, "dist": dist, "xw": alt_xw, "score": score})
+    
     alt_list = sorted(alt_list, key=lambda x: x['score'])[:3]
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{xw_val}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Horizon XW</th><th>Probability</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>{'HIGH' if a['score'] < 150 else 'STABLE'}</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
+    
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3>
+    <div style="display:flex; gap:40px;">
+        <div style="flex:1;">
+            <p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{xw_val}kt</b>.</p>
+            <p><b>Tactical Alternate Recommendations:</b></p>
+            <table class="alt-table">
+                <tr><th>Alternate</th><th>Dist (NM)</th><th>Horizon XW</th><th>Probability</th></tr>
+                {"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>{'HIGH' if a['score'] < 150 else 'STABLE'}</span></td></tr>" for a in alt_list])}
+            </table>
+        </div>
+        <div style="flex:1;">
+            <div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;">
+                <b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div>
+            </div>
+            <div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
+                <b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div>
+            </div>
+        </div>
+    </div></div>""", unsafe_allow_html=True)
     if st.button("Close Strategy Brief"): st.session_state.investigate_iata = "None"; st.rerun()
 
 # 12. HANDOVER LOG
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v296_final", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v297", label_visibility="collapsed")

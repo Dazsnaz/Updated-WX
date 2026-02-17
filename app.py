@@ -9,31 +9,56 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING
+# 2. HUD STYLING (v26.2 RESTORATION + v30.2 COLOR FIX)
 st.markdown("""
     <style>
+    /* Global Background */
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
+    
+    /* Header */
     .ba-header { 
         background-color: #002366 !important; color: #ffffff !important; 
         padding: 20px; border-radius: 8px; margin-bottom: 20px; 
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
+
+    /* Sidebar Controls */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
-    [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
+
+    /* DROPDOWN & SELECTBOX FONT FIX (FORCING NAVY) */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
+    [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
+
+    /* STRATEGIC BRIEF (REASON BOX) FONT FIX */
+    .reason-box { 
+        background-color: #ffffff !important; 
+        border: 1px solid #ddd; padding: 25px; border-radius: 5px; 
+        margin-top: 20px; border-top: 10px solid #d6001a; 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+    }
+    /* Force all text inside the brief to Navy */
+    .reason-box, .reason-box div, .reason-box p, .reason-box h3, .reason-box b, .reason-box span, .reason-box table { 
+        color: #002366 !important; 
+    }
+    
+    /* Radio Button Text inside Brief */
+    div[data-testid="stMarkdownContainer"] p, .stRadio label { color: #002366 !important; font-weight: bold !important; }
+
+    /* Alert Tabs */
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
-    .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .reason-box * { color: #002366 !important; }
+
+    /* Handover Log */
+    [data-testid="stTextArea"] textarea { 
+        color: #002366 !important; background-color: #ffffff !important; 
+        font-weight: bold !important; font-family: 'Courier New', monospace !important; 
+    }
+
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; min-width: 580px !important; white-space: normal !important; }
-    
-    /* TOGGLE STYLING */
-    .stRadio > div { flex-direction: row !important; gap: 20px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -72,7 +97,7 @@ base_airports = {
     "GLA": {"icao": "EGPF", "lat": 55.871, "lon": -4.433, "rwy": 230, "fleet": "Cityflyer", "spec": False, "hide_map": False},
     "BHD": {"icao": "EGAC", "lat": 54.618, "lon": -5.872, "rwy": 220, "fleet": "Cityflyer", "spec": False, "hide_map": False},
     "STN": {"icao": "EGSS", "lat": 51.885, "lon": 0.235, "rwy": 220, "fleet": "Cityflyer", "spec": False, "hide_map": False},
-    "RTM": {"icao": "EHRD", "lat": 51.957, "lon": 4.440, "rwy": 240, "fleet": "Cityflyer", "spec": False, "hide_map": False},
+    "RTM": {"icao": "EHRD", "lat": 51.957, " Scalable Map Marker": 1, "lon": 4.440, "rwy": 240, "fleet": "Cityflyer", "spec": False, "hide_map": False},
     "DUB": {"icao": "EIDW", "lat": 53.421, "lon": -6.270, "rwy": 280, "fleet": "Cityflyer", "spec": False, "hide_map": False},
     "FLR": {"icao": "LIRQ", "lat": 43.810, "lon": 11.205, "rwy": 50, "fleet": "Cityflyer", "spec": True, "hide_map": False},
     "CMF": {"icao": "LFLB", "lat": 45.638, "lon": 5.880, "rwy": 180, "fleet": "Cityflyer", "spec": True, "hide_map": False},
@@ -95,7 +120,7 @@ base_airports = {
     "VRN": {"icao": "LIPX", "lat": 45.396, "lon": 10.888, "rwy": 40, "fleet": "Euroflyer", "spec": False, "hide_map": False},
     "OPO": {"icao": "LPPR", "lat": 41.242, "lon": -8.678, "rwy": 350, "fleet": "Euroflyer", "spec": False, "hide_map": False},
     "LYS": {"icao": "LFLL", "lat": 45.726, "lon": 5.090, "rwy": 350, "fleet": "Euroflyer", "spec": False, "hide_map": False},
-    "SZG": {"icao": "LOWS", "lat": 47.794, "lon": 13.004, "rwy": 330, "fleet": "Euroflyer", "spec": False, "hide_map": False},
+    "SZG": {"icao": "LOWS", "lat": 47.794, " Scalable Map Marker": 1, "lon": 13.004, "rwy": 330, "fleet": "Euroflyer", "spec": False, "hide_map": False},
     "BOD": {"icao": "LFBD", "lat": 44.828, "lon": -0.716, "rwy": 230, "fleet": "Euroflyer", "spec": False, "hide_map": False},
     "GNB": {"icao": "LFLS", "lat": 45.363, "lon": 5.330, "rwy": 90, "fleet": "Euroflyer", "spec": False, "hide_map": False},
     "TRN": {"icao": "LIMF", "lat": 45.202, "lon": 7.649, "rwy": 360, "fleet": "Euroflyer", "spec": False, "hide_map": False},
@@ -223,15 +248,16 @@ for iata, info in base_airports.items():
     if actual_haz: metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
     if fore_haz: taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "hex": "secondary"}
 
-    shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} Best XW:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{bold_hazard(data['raw_m'])}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{bold_hazard(data['raw_t'])}</div></div></div>"""
+    m_bold, t_bold = bold_hazard(data['raw_m']), bold_hazard(data['raw_t'])
+    shared_content = f"""<div style="width:580px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} Best XW:</b> <b style="color:#002366;">{cur_xw} KT</b><br><b style="color:#002366;">ACTUAL:</b> <span style="color:#002366;">{"/".join(m_issues) if m_issues else "STABLE"}</span><br><b style="color:#002366;">FORECAST ({time_horizon}):</b> <span style="color:#002366;">{"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</span></div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word; color:#002366;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word; color:#002366;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v30.1</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v30.2</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v301")
+st_folium(m, width=1200, height=1200, key="map_stable_v302")
 
 # 11. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -247,20 +273,18 @@ if taf_alerts:
         with cols_f[i % 5]:
             if st.button(f"{iata} {d['time']} {d['type']}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 12. STRATEGY BRIEF WITH RWY OVERRIDE
+# 12. STRATEGY BRIEF WITH OVERRIDE & COLOR FIX
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
-    
     r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
     
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief</h3>""", unsafe_allow_html=True)
     
-    # MANUAL OVERRIDE TOGGLE
-    sel_rwy = st.radio(f"Manual RWY Select for {iata}:", [f"RWY {r1:02d} (Fav.)", f"RWY {r2:02d} (Recip.)"], horizontal=True)
+    # MANUAL OVERRIDE (Forcing Navy via Markdown)
+    sel_rwy = st.radio(f"Manual RWY Selection for {iata}:", [f"RWY {r1:02d} (Fav.)", f"RWY {r2:02d} (Recip.)"], horizontal=True)
     target_hdg = info['rwy'] if f"{r1:02d}" in sel_rwy else (info['rwy']+180)%360
-    
     final_xw = get_xw_component(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), target_hdg)
     
     # ALTERNATES
@@ -285,4 +309,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']}\n"
-st.text_area("Log:", value=h_txt, height=200, key="log_v301", label_visibility="collapsed")
+st.text_area("Log:", value=h_txt, height=200, key="log_v302", label_visibility="collapsed")

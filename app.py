@@ -45,10 +45,9 @@ st.markdown("""
     
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     
-    /* TOOLTIP WRAPPING FIX */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { 
         background: white !important; 
-        border: 2px solid #002366 !important; 
+        border: 2.5px solid #002366 !important; 
         padding: 0 !important; 
         opacity: 1 !important; 
         box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
@@ -206,14 +205,12 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                 if l_v < v_lim: l_issues.append("VIS")
                 if l_c < c_lim: l_issues.append("CLOUD")
                 if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
-                
                 l_dir = line.wind_direction.value if (line.wind_direction and line.wind_direction.value) else info['rwy']
                 l_spd = line.wind_speed.value if (line.wind_speed and line.wind_speed.value) else 0
                 l_gst = line.wind_gust.value if (line.wind_gust and line.wind_gust.value) else 0
                 peak = max(l_spd, l_gst)
                 if calculate_xwind(l_dir, peak, info['rwy']) >= xw_threshold: l_issues.append("XWIND")
                 elif peak > 25: l_issues.append("WINDY")
-                
                 if l_issues:
                     for iss in l_issues:
                         if iss not in w_issues: w_issues.append(iss)
@@ -268,21 +265,16 @@ for iata, info in base_airports.items():
     elif hazard_filter != "Show All Network" and hazard_filter not in all_summary: continue
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
+    
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.7</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
-# UNIVERSAL ZOOM FIX
-m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False, zoom_control=False)
-folium.TileLayer(no_wrap=True).add_to(m) # Added stability for panning
-st.markdown("<style>.leaflet-bottom.leaflet-left { margin-bottom: 20px !important; }</style>", unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.8</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
-# Correct Zoom Placement
-folium.map.CustomControl(
-    '<div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out" href="#" title="Zoom out" role="button" aria-label="Zoom out">-</a></div>',
-    position='bottomleft'
-).add_to(m)
+m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False, zoom_control=False)
+# FIXED ZOOM POSITION VIA STABLE CLASS
+folium.ZoomControl(position='bottomleft').add_to(m)
 
 for mkr in map_markers:
     folium.CircleMarker(
@@ -290,7 +282,7 @@ for mkr in map_markers:
         popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v297")
+st_folium(m, width=1200, height=1200, key="map_stable_v298")
 
 # 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -354,4 +346,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v297", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v298", label_visibility="collapsed")

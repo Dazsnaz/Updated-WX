@@ -25,16 +25,33 @@ st.markdown("""
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
+    
+    /* STRATEGY BRIEF LOCK */
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box * { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
+    
+    /* ALTERNATE TABLE STYLING */
     .alt-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     .alt-table th { background: #f0f2f6; padding: 8px; text-align: left; border-bottom: 2px solid #002366; }
     .alt-table td { padding: 8px; border-bottom: 1px solid #eee; }
+
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
+
+    /* MAP HOVER TOOLTIP FIX: White background, Navy text */
+    .leaflet-tooltip { 
+        background: white !important; 
+        border: 2px solid #002366 !important; 
+        color: #002366 !important; 
+        font-family: monospace !important; 
+        font-size: 13px !important; 
+        opacity: 1 !important; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        padding: 10px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -141,7 +158,7 @@ def get_raw_weather_master(airport_dict):
 
 raw_weather_bundle = get_raw_weather_master(base_airports)
 
-# 8. PROCESSOR (STABILITY PATCH: SAFETY CHECK ON START_TIME)
+# 8. PROCESSOR
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
     processed = {}
     now_utc = datetime.now(timezone.utc)
@@ -162,7 +179,6 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
         w_issues, f_wind_spd, f_wind_dir = [], 0, 0
         if t.data:
             for line in t.data.forecast:
-                # STABILITY PATCH: Check if timestamp exists before comparison
                 if not line.start_time or not hasattr(line.start_time, 'dt'): continue
                 if line.start_time.dt > cutoff_time: continue
                 
@@ -203,7 +219,7 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours)
 
-# 9. UI LOOP & TREND CALCULATION
+# 9. UI LOOP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
@@ -238,16 +254,47 @@ for iata, info in base_airports.items():
     if actual_hazardous: metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
     if forecast_hazardous: taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
 
+    # Apply Tactical Filter
+    all_summary = "/".join(m_issues) + "".join(data['f_issues'])
+    if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
+    elif hazard_filter == "XWIND" and "XWIND" not in all_summary: continue
+    elif hazard_filter == "WINDY (Gusts >25)" and "WINDY" not in all_summary: continue
+    elif hazard_filter == "FOG" and "FOG" not in all_summary: continue
+    elif hazard_filter == "WINTER (Snow/FZRA)" and "WINTER" not in all_summary: continue
+    elif hazard_filter == "TSRA" and "TSRA" not in all_summary: continue
+    elif hazard_filter == "VIS (<Limits)" and "VIS" not in all_summary: continue
+    elif hazard_filter == "LOW CLOUD (<Limits)" and "CLOUD" not in all_summary: continue
+
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
+    
+    # Tooltip HTML mirroring the Status content
+    tooltip_html = f"""
+    <div style="width:250px; color:#002366; background:white;">
+        <b style="font-size:16px;">{iata} {trend_icon}</b><br>
+        <hr style="margin:5px 0; border:0.5px solid #ddd;">
+        <b>{rwy_text} X-Wind:</b> {xw} KT<br>
+        <b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br>
+        <b>FORECAST:</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}<br>
+        <small style="color:#888;">Click for Strategy Brief</small>
+    </div>
+    """
+    
+    # Popup remains the large detailed version
     popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
-    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html, "trend": trend_icon})
+    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html, "trend": trend_icon, "tooltip": tooltip_html})
 
 # 10. UI RENDER
 st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter", scrollWheelZoom=False)
 for mkr in map_markers:
-    folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['popup'], max_width=650), tooltip=folium.Tooltip(f"{mkr['iata']} {mkr['trend']}", direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_final_v281")
+    folium.CircleMarker(
+        location=[mkr['lat'], mkr['lon']], 
+        radius=7, color=mkr['color'], 
+        fill=True, 
+        popup=folium.Popup(mkr['popup'], max_width=650), 
+        tooltip=folium.Tooltip(mkr['tooltip'], direction='top', sticky=False)
+    ).add_to(m)
+st_folium(m, width=1200, height=1200, key="map_final_v282")
 
 # ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -307,4 +354,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for iata, d in taf_alerts.items(): h_txt += f"{iata}: {d['type']} ({d['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v281", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_v282", label_visibility="collapsed")

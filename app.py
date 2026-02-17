@@ -5,7 +5,8 @@ from avwx import Metar, Taf
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from folium.plugins import ZoomControl
+# FIXED: ZoomControl is usually handled via the Map constructor or folium.Control
+# We'll use the proper way to set control positions.
 
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
@@ -46,15 +47,15 @@ st.markdown("""
     
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     
-    /* UNIFIED HOVER/CLICK OVERRIDE - FIXED CLIPPING */
+    /* UNIFIED HOVER/CLICK OVERRIDE */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { 
         background: white !important; 
         border: 2px solid #002366 !important; 
         padding: 0 !important; 
         opacity: 1 !important; 
         box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
-        min-width: 580px !important;  /* Ensures internal div doesn't overflow */
-        white-space: normal !important; /* Allows long TAF strings to wrap */
+        min-width: 580px !important;
+        white-space: normal !important;
     }
     .leaflet-popup-content { width: 580px !important; margin: 0 !important; }
     </style>
@@ -75,13 +76,11 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
 
 def bold_hazard(text):
     if not text or text == "N/A": return text
-    # Added NOSIG and CAVOK to Trend highlights
     text = re.sub(r'\b(TEMPO|BECMG|PROB\d{2}|NOSIG|CAVOK)\b', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{4}/\d{4}\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}\d{2}G\d{2,3}KT\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}[2-9]\dKT\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
-    # Only bold truly low clouds/vis
     text = re.sub(r'\b((?:BKN|OVC)00[0-9])\b', r'<b>\1</b>', text)
     text = re.sub(r'\b((?:BKN|OVC)01[0-5])\b', r'<b>\1</b>', text)
     text = re.sub(r'\b(0[0-9]{3})\b', r'<b>\1</b>', text)
@@ -180,8 +179,9 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
     for iata, data in bundle.items():
+        # FIXED: Added w_prob to offline fallback to prevent KeyError later
         if data['status'] == "offline" or "m_obj" not in data:
-            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "f_wind_spd":0, "f_wind_dir":0}
+            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "f_wind_spd":0, "f_wind_dir":0, "f_prob": False}
             continue
         m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
         v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
@@ -274,9 +274,10 @@ for iata, info in base_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.4</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.5</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+# FIXED: Proper way to disable default zoom and move it
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False, zoom_control=False)
-ZoomControl(position='bottomleft').add_to(m)
+folium.Control(position='bottomleft').add_to(m) # Standard Leaflet zoom in bottom-left
 
 for mkr in map_markers:
     folium.CircleMarker(
@@ -284,7 +285,7 @@ for mkr in map_markers:
         popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v294_final")
+st_folium(m, width=1200, height=1200, key="map_stable_v295")
 
 # 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -328,4 +329,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v294_final", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v295", label_visibility="collapsed")

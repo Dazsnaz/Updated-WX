@@ -163,7 +163,6 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
             continue
         m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
         v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
-        
         m_vis = 9999
         if m.data and hasattr(m.data, 'visibility') and m.data.visibility:
             m_vis = m.data.visibility.value if m.data.visibility.value is not None else 9999
@@ -242,7 +241,7 @@ for iata, info in base_airports.items():
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    # UNIFIED CONTENT FOR BOTH
+    # DYNAMIC BOX SIZE (580px)
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
@@ -252,10 +251,11 @@ m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter",
 for mkr in map_markers:
     folium.CircleMarker(
         location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, 
-        popup=folium.Popup(mkr['content'], max_width=650), 
+        # FIX: Added auto_pan=True and auto_pan_padding=(150, 150) to prevent edge clipping
+        popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_unified_v287")
+st_folium(m, width=1200, height=1200, key="map_autopan_v288")
 
 # 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -319,4 +319,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v287", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v288", label_visibility="collapsed")

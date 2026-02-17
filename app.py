@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V26.2 BASE + TREND SUPPORT)
+# 2. HUD STYLING
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -39,8 +39,15 @@ st.markdown("""
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
 
-    /* v26.2 STYLE TOOLTIP RESTORATION */
-    .leaflet-tooltip { background: white !important; border: 2px solid #002366 !important; border-radius: 5px !important; opacity: 1 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; color: #002366 !important; }
+    /* UNIFIED HOVER/CLICK OVERRIDE */
+    .leaflet-tooltip, .leaflet-popup-content-wrapper { 
+        background: white !important; 
+        border: 2px solid #002366 !important; 
+        padding: 0 !important; 
+        opacity: 1 !important; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before { border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -64,7 +71,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|VIS|CLOUD|FOG|XWIND|WIND)\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -133,7 +140,7 @@ with st.sidebar:
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
 
-# 7. MASTER DATA FETCH
+# 7. DATA FETCH
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -146,7 +153,7 @@ def get_raw_weather_master(airport_dict):
 
 raw_weather_bundle = get_raw_weather_master(base_airports)
 
-# 8. PROCESSOR (STABILITY PATCH: Safe key access to prevent KeyError)
+# 8. PROCESSOR
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
@@ -235,9 +242,9 @@ for iata, info in base_airports.items():
 
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    # v26.2 STYLE POPUP RESTORATION
-    popup_html = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
-    map_markers.append({"iata": iata, "lat": info['lat'], "lon": info['lon'], "color": color, "popup": popup_html, "trend": trend_icon, "summary": f"{iata} {trend_icon} | {rwy_text} | {xw}kt XW"})
+    # UNIFIED CONTENT FOR BOTH
+    shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+    map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
 st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
@@ -245,12 +252,12 @@ m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter",
 for mkr in map_markers:
     folium.CircleMarker(
         location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, 
-        popup=folium.Popup(mkr['popup'], max_width=650), 
-        tooltip=folium.Tooltip(mkr['summary'])
+        popup=folium.Popup(mkr['content'], max_width=650), 
+        tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v286")
+st_folium(m, width=1200, height=1200, key="map_unified_v287")
 
-# 11. ALERTS & STRATEGY (RESTORED)
+# 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(5)
@@ -277,7 +284,6 @@ if st.session_state.investigate_iata != "None":
         if g != iata:
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
             alt_d = weather_data.get(g)
-            # Safe alternate crosswind check
             a_dir = alt_d.get('f_wind_dir') or alt_d.get('w_dir', 0)
             a_spd = alt_d.get('f_wind_spd') or alt_d.get('w_spd', 0)
             alt_xw = calculate_xwind(a_dir, a_spd, base_airports[g]['rwy'])
@@ -313,4 +319,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_v286", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v287", label_visibility="collapsed")

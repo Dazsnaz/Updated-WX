@@ -5,8 +5,6 @@ from avwx import Metar, Taf
 import math
 import re
 from datetime import datetime, timedelta, timezone
-# FIXED: ZoomControl is usually handled via the Map constructor or folium.Control
-# We'll use the proper way to set control positions.
 
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
@@ -47,7 +45,7 @@ st.markdown("""
     
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     
-    /* UNIFIED HOVER/CLICK OVERRIDE */
+    /* UNIFIED HOVER/CLICK OVERRIDE - FIXED CLIPPING */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { 
         background: white !important; 
         border: 2px solid #002366 !important; 
@@ -179,7 +177,6 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
     for iata, data in bundle.items():
-        # FIXED: Added w_prob to offline fallback to prevent KeyError later
         if data['status'] == "offline" or "m_obj" not in data:
             processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "f_wind_spd":0, "f_wind_dir":0, "f_prob": False}
             continue
@@ -274,10 +271,10 @@ for iata, info in base_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.5</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
-# FIXED: Proper way to disable default zoom and move it
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.6</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+# FIXED ZOOM POSITION
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False, zoom_control=False)
-folium.Control(position='bottomleft').add_to(m) # Standard Leaflet zoom in bottom-left
+folium.ZoomControl(position='bottomleft').add_to(m)
 
 for mkr in map_markers:
     folium.CircleMarker(
@@ -285,7 +282,7 @@ for mkr in map_markers:
         popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_stable_v295")
+st_folium(m, width=1200, height=1200, key="map_stable_v296")
 
 # 11. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -321,7 +318,6 @@ if st.session_state.investigate_iata != "None":
     alt_list = sorted(alt_list, key=lambda x: x['score'])[:3]
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")
-    
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{xw_val}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Horizon XW</th><th>Probability</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>{'HIGH' if a['score'] < 150 else 'STABLE'}</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
     if st.button("Close Strategy Brief"): st.session_state.investigate_iata = "None"; st.rerun()
 
@@ -329,4 +325,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v295", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v296_final", label_visibility="collapsed")

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (V29.2 BASE + STRICT NAMESPACING)
+# 2. HUD STYLING (v31.3 SURGICAL FONT LOCK)
 st.markdown("""
     <style>
     /* GLOBAL THEME */
@@ -23,51 +23,48 @@ st.markdown("""
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
 
-    /* SIDEBAR - STRICT WHITE LOCK */
+    /* SIDEBAR (WHITE LOCK) */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
-    [data-testid="stSidebar"] label p, 
-    [data-testid="stSidebar"] p, 
-    [data-testid="stSidebar"] span { 
-        color: #ffffff !important; 
-        font-weight: bold !important; 
-    }
-    /* Specific Sidebar Widget Labels */
-    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { color: #ffffff !important; }
+    [data-testid="stSidebar"] label p, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span { color: #ffffff !important; }
 
     /* DROPDOWNS (NAVY-ON-WHITE) */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
 
-    /* ALERT BUTTONS */
-    .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-
-    /* --- STRATEGY BRIEF (STRICT NAVY BLUE LOCK) --- */
+    /* STRATEGY BRIEF - SURGICAL TARGETING */
     .reason-box { 
         background-color: #ffffff !important; 
         border: 1px solid #ddd; padding: 25px; border-radius: 5px; 
         margin-top: 20px; border-top: 10px solid #d6001a; 
         box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
-    /* Force Navy strictly inside the Reason Box container only */
-    .reason-box * { color: #002366 !important; }
+    
+    /* v31.3: Target ONLY the specific Brief components requested to be Navy Blue */
+    .reason-box h3, 
+    .reason-box .stRadio label, 
+    .reason-box [data-testid="stWidgetLabel"] p,
+    .reason-box p, 
+    .reason-box b, 
+    .reason-box span,
+    .reason-box td, 
+    .reason-box th { 
+        color: #002366 !important; 
+    }
     
     .wx-box {
         padding: 12px; background: #f0f2f6 !important; 
         border-radius: 5px; border-left: 5px solid #002366; 
         margin-bottom: 10px; font-family: monospace; font-size: 14px;
         white-space: pre-wrap;
-        color: #002366 !important;
+        color: #002366 !important; /* Force Navy for weather raw text */
     }
     
     .alt-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    .alt-table th { background: #f0f2f6; padding: 8px; border-bottom: 2px solid #002366; text-align: left; color: #002366 !important; }
-    .alt-table td { padding: 8px; border-bottom: 1px solid #eee; color: #002366 !important; }
+    .alt-table th { background: #f0f2f6; padding: 8px; border-bottom: 2px solid #002366; text-align: left; }
+    .alt-table td { padding: 8px; border-bottom: 1px solid #eee; }
 
-    /* TEXT AREA FOR LOG */
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
-    
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; min-width: 580px !important; white-space: normal !important; }
     </style>
@@ -149,6 +146,7 @@ base_airports = {
     "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
+    # STRATEGIC ALTS
     "PSA": {"icao": "LIRP", "lat": 43.683, "lon": 10.395, "rwy": 220, "fleet": "Special", "spec": False, "hide_map": True},
     "BLQ": {"icao": "LIPE", "lat": 44.535, "lon": 11.288, "rwy": 300, "fleet": "Special", "spec": False, "hide_map": True},
     "MUC": {"icao": "EDDM", "lat": 48.353, "lon": 11.786, "rwy": 260, "fleet": "Special", "spec": False, "hide_map": True},
@@ -175,7 +173,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. DATA FETCH (30 MIN TTL)
+# 7. DATA FETCH
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -213,9 +211,8 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                 l_spd = getattr(line.wind_speed, 'value', 0) if line.wind_speed else 0
                 l_gst = getattr(line.wind_gust, 'value', 0) if line.wind_gust else 0
                 peak = max(l_spd, l_gst)
-                
-                if re.search(r'\bSN\b|\bFZ|\bPL\b', l_raw): l_issues.append("WINTER")
                 if calculate_best_xwind(l_dir, peak, info['rwy']) >= xw_threshold: l_issues.append("XWIND")
+                if re.search(r'\bSN\b|\bFZ|\bPL\b', l_raw): l_issues.append("WINTER")
                 if "PROB" in l_raw: w_prob = True
                 if l_issues:
                     for iss in l_issues:
@@ -258,11 +255,11 @@ for iata, info in base_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v31.2</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v31.3</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_restored_v312")
+st_folium(m, width=1200, height=1200, key="map_restored_v313")
 
 # 11. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -285,11 +282,11 @@ if st.session_state.investigate_iata != "None":
     r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
     
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief</h3>""", unsafe_allow_html=True)
+    
     sel_rwy = st.radio(f"Manual RWY Selection for {iata}:", [f"RWY {r1:02d}", f"RWY {r2:02d}"], horizontal=True)
     target_hdg = info['rwy'] if f"{r1:02d}" in sel_rwy else (info['rwy']+180)%360
     final_xw = get_xw_component(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), target_hdg)
     
-    # Preferred Alts
     alt_list = []
     pref = {"FLR":["PSA","BLQ"], "INN":["MUC"], "FNC":["PSO","FAO","TFS"]}.get(iata, [])
     for p_iata in pref:
@@ -323,4 +320,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']}\n"
-st.text_area("Log:", value=h_txt, height=200, key="log_v312", label_visibility="collapsed")
+st.text_area("Log:", value=h_txt, height=200, key="log_v313", label_visibility="collapsed")

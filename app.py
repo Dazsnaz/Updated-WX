@@ -9,18 +9,21 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (v29.2 FONT SYNC + v30.7 TABLE & FONT LOCK)
+# 2. HUD STYLING (v29.2 BASE + v30.8 AGGRESSIVE FONT LOCK)
 st.markdown("""
     <style>
+    /* GLOBAL THEME */
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
+    /* HEADER */
     .ba-header { 
         background-color: #002366 !important; color: #ffffff !important; 
         padding: 20px; border-radius: 8px; margin-bottom: 20px; 
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
 
+    /* SIDEBAR */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
 
@@ -32,18 +35,26 @@ st.markdown("""
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
 
-    /* --- v30.7 STRATEGY BRIEF COMPLETE FONT LOCK --- */
+    /* --- v30.8 STRATEGY BRIEF AGGRESSIVE FONT LOCK --- */
     .reason-box { 
         background-color: #ffffff !important; 
         border: 1px solid #ddd; padding: 25px; border-radius: 5px; 
         margin-top: 20px; border-top: 10px solid #d6001a; 
         box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
-    /* Force all Strategy Text to Navy */
-    .reason-box h3, .reason-box p, .reason-box b, .reason-box span, .reason-box div, .reason-box label { 
+    
+    /* Force Navy Blue on EVERY element inside the box to override Streamlit Dark Mode */
+    .reason-box p, .reason-box span, .reason-box b, .reason-box div, 
+    .reason-box label, .reason-box h3, .reason-box th, .reason-box td, 
+    .reason-box li, .reason-box small { 
         color: #002366 !important; 
     }
     
+    /* Specific override for the Radio buttons text which is stubborn */
+    [data-testid="stMarkdownContainer"] p {
+        color: #002366 !important;
+    }
+
     .wx-box {
         padding: 12px; background: #f0f2f6 !important; 
         border-radius: 5px; border-left: 5px solid #002366; 
@@ -106,7 +117,7 @@ base_airports = {
     "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.571, "rwy": 250, "fleet": "Cityflyer", "spec": False},
     "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.277, "rwy": 360, "fleet": "Cityflyer", "spec": False},
     "MAD": {"icao": "LEMD", "lat": 40.494, "lon": -3.567, "rwy": 140, "fleet": "Cityflyer", "spec": False},
-    "IBZ": {"icao": "LEIB", "lat": 38.873, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
+    "IBZ": {"icao": "LEIB", "lat": 38.873, " Scalable Map Marker": 1, "lon": 1.373, "rwy": 60, "fleet": "Cityflyer", "spec": False},
     "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "Cityflyer", "spec": False},
     "AGP": {"icao": "LEMG", "lat": 36.675, "lon": -4.499, "rwy": 130, "fleet": "Cityflyer", "spec": False},
     "FAO": {"icao": "LPFR", "lat": 37.017, "lon": -7.965, "rwy": 280, "fleet": "Cityflyer", "spec": False},
@@ -156,6 +167,8 @@ with st.sidebar:
     horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
     st.markdown("---")
     xw_limit = st.slider("X-WIND ALERT (KT)", 15, 35, 25)
+    st.markdown("---")
+    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY", "FOG", "WINTER", "TSRA", "VIS", "LOW CLOUD"])
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
@@ -230,7 +243,7 @@ for iata, info in base_airports.items():
     if actual_haz: color = "#d6001a" if any(x in m_issues for x in ["FOG","XWIND"]) else "#eb8f34"
     elif fore_haz: color = "#eb8f34"
     if not actual_haz and not fore_haz: green_stations.append(iata)
-    if info.get('hide_map'): continue
+    if info.get('icao') in ["LIRP","LIPE","EDDM","LPPS"]: continue # Skip special alts from map
     if not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)): continue
 
     trend_icon = "📈" if (not actual_haz and fore_haz) else ("📉" if (actual_haz and not fore_haz) else "➡️")
@@ -243,11 +256,11 @@ for iata, info in base_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v30.7</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v30.8</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_restored_v307")
+st_folium(m, width=1200, height=1200, key="map_restored_v308")
 
 # 11. ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
@@ -270,11 +283,13 @@ if st.session_state.investigate_iata != "None":
     r1, r2 = int(info['rwy']/10), int(((info['rwy']+180)%360)/10)
     
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief</h3>""", unsafe_allow_html=True)
-    sel_rwy = st.radio(f"Manual RWY Selection for {iata}:", [f"RWY {r1:02d}", f"RWY {r2:02d}"], horizontal=True)
+    
+    # Selection Toggles
+    sel_rwy = st.radio(f"Active Runway Selection for {iata}:", [f"RWY {r1:02d}", f"RWY {r2:02d}"], horizontal=True)
     target_hdg = info['rwy'] if f"{r1:02d}" in sel_rwy else (info['rwy']+180)%360
     final_xw = get_xw_component(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), target_hdg)
     
-    # Preferred Alts
+    # Alternate Logic
     alt_list = []
     pref = {"FLR":["PSA","BLQ"], "INN":["MUC"], "FNC":["PSO","FAO","TFS"]}.get(iata, [])
     for p_iata in pref:
@@ -289,23 +304,27 @@ if st.session_state.investigate_iata != "None":
             xw = calculate_best_xwind(alt_d.get('w_dir',0), max(alt_d.get('w_spd',0), alt_d.get('w_gst',0)), g_info['rwy'])
             alt_list.append({"iata": g, "dist": dist, "xw": xw, "score": (dist*0.6)+(xw*2.5)})
     
-    st.markdown(f"""<div style="display:flex; gap:40px;"><div style="flex:1;">
-        <p><b>Active Hazards:</b> {(taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', 'STABLE')}</p>
-        <p><b>Selected {sel_rwy} Crosswind:</b> <b>{final_xw}kt</b>.</p>
-        <p><b>Strategic Alternates:</b></p>
-        <table class="alt-table">
-            <tr><th>Alternate</th><th>Dist (NM)</th><th>Best XW</th><th>Status</th></tr>
-            {"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']}</td><td>HIGH</td></tr>" for a in sorted(alt_list, key=lambda x: x['score'])[:3]])}
-        </table>
-    </div>
-    <div style="flex:1;">
-        <b>LIVE METAR</b><div class="wx-box">{bold_hazard(d.get('raw_m'))}</div>
-        <b>LIVE TAF</b><div class="wx-box">{bold_hazard(d.get('raw_t'))}</div>
-    </div></div></div>""", unsafe_allow_html=True)
+    # Body with aggressive HTML styling to force font visibility
+    st.markdown(f"""
+    <div style="display:flex; gap:40px;">
+        <div style="flex:1;">
+            <p><b>Active Hazards:</b> {(taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', 'STABLE')}</p>
+            <p><b>Selected {sel_rwy} Crosswind:</b> <b>{final_xw}kt</b>.</p>
+            <p><b>Strategic Alternate Recommendations:</b></p>
+            <table class="alt-table">
+                <tr><th>Alternate</th><th>Dist (NM)</th><th>Best XW</th><th>Probability</th></tr>
+                {"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td>HIGH</td></tr>" for a in sorted(alt_list, key=lambda x: x['score'])[:3]])}
+            </table>
+        </div>
+        <div style="flex:1;">
+            <b>LIVE METAR</b><div class="wx-box">{bold_hazard(d.get('raw_m'))}</div>
+            <b>LIVE TAF</b><div class="wx-box">{bold_hazard(d.get('raw_t'))}</div>
+        </div>
+    </div></div>""", unsafe_allow_html=True)
     if st.button("Close Strategy Brief"): st.session_state.investigate_iata = "None"; st.rerun()
 
 # 13. LOG
 st.markdown('<div class="section-header">📝 Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']}\n"
-st.text_area("Log:", value=h_txt, height=200, key="log_v307", label_visibility="collapsed")
+st.text_area("Log:", value=h_txt, height=200, key="log_v308", label_visibility="collapsed")

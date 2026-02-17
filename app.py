@@ -14,49 +14,33 @@ st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    
     .ba-header { 
         background-color: #002366 !important; color: #ffffff !important; 
         padding: 20px; border-radius: 8px; margin-bottom: 20px; 
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
-
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
     [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
-    
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box * { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
-    
     .alt-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     .alt-table th { background: #f0f2f6; padding: 8px; text-align: left; border-bottom: 2px solid #002366; }
     .alt-table td { padding: 8px; border-bottom: 1px solid #eee; }
-
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
-
-    /* MEGA-TOOLTIP FIX: LARGE BOX, 14px FONT, WRAPPING ENABLED */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { 
-        background: white !important; 
-        color: #002366 !important; 
-        border: 2.5px solid #002366 !important;
-        font-family: 'Courier New', monospace !important;
-        font-size: 14px !important;
-        box-shadow: 0 6px 25px rgba(0,0,0,0.6) !important;
-        opacity: 1 !important;
-        padding: 0 !important;
-        min-width: 550px !important;
-        white-space: normal !important;
+        background: white !important; color: #002366 !important; border: 2.5px solid #002366 !important;
+        font-family: 'Courier New', monospace !important; font-size: 14px !important; opacity: 1 !important;
+        min-width: 550px !important; white-space: normal !important;
     }
     .leaflet-popup-content { width: 550px !important; margin: 0 !important; }
-    .leaflet-popup-tip { background: #002366 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -162,20 +146,27 @@ def get_raw_weather_master(airport_dict):
 
 raw_weather_bundle = get_raw_weather_master(base_airports)
 
+# 8. PROCESSOR (STABILITY HARDENING)
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
     for iata, data in bundle.items():
-        if data['status'] == "offline":
-            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": []}
+        if data['status'] == "offline" or "m_obj" not in data:
+            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "vis": 9999, "cig": 9999}
             continue
+        
         m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
         v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
-        m_vis = m.data.visibility.value if (m.data and m.data.visibility) else 9999
+        
+        m_vis = 9999
+        if m.data and hasattr(m.data, 'visibility') and m.data.visibility:
+            m_vis = m.data.visibility.value if m.data.visibility.value is not None else 9999
+            
         m_cig = 9999
-        if m.data and m.data.clouds:
+        if m.data and hasattr(m.data, 'clouds') and m.data.clouds:
             for lyr in m.data.clouds:
                 if lyr.type in ['BKN', 'OVC'] and lyr.base: m_cig = min(m_cig, lyr.base * 100)
+        
         w_issues, f_wind_spd, f_wind_dir, w_time, w_prob = [], 0, 0, "", False
         if t.data:
             for line in t.data.forecast:
@@ -185,19 +176,28 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit):
                 l_issues = []
                 if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
                 if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
-                if (line.visibility.value if line.visibility else 9999) < v_lim: l_issues.append("VIS")
+                l_v = line.visibility.value if (line.visibility and line.visibility.value is not None) else 9999
+                if l_v < v_lim: l_issues.append("VIS")
                 l_dir = line.wind_direction.value if line.wind_direction else info['rwy']
                 l_spd = line.wind_speed.value if line.wind_speed else 0
                 l_gst = line.wind_gust.value if line.wind_gust else 0
                 if calculate_xwind(l_dir, max(l_spd, l_gst), info['rwy']) >= 25: l_issues.append("XWIND")
                 if l_issues:
                     w_issues = l_issues; w_time = f"{line.start_time.dt.strftime('%H')}Z"; f_wind_spd, f_wind_dir = max(l_spd, l_gst), l_dir; w_prob = ("PROB" in l_raw)
-        processed[iata] = {"vis": m_vis, "cig": m_cig, "status": "online", "w_dir": m.data.wind_direction.value if m.data.wind_direction else 0, "w_spd": m.data.wind_speed.value if m.data.wind_speed else 0, "w_gst": m.data.wind_gust.value if m.data.wind_gust else 0, "raw_m": m.raw or "N/A", "raw_t": t.raw or "N/A", "f_issues": w_issues, "f_time": w_time, "f_wind_spd": f_wind_spd, "f_wind_dir": f_wind_dir, "f_prob": w_prob}
+        
+        processed[iata] = {
+            "vis": m_vis, "cig": m_cig, "status": "online",
+            "w_dir": m.data.wind_direction.value if (m.data and m.data.wind_direction) else 0,
+            "w_spd": m.data.wind_speed.value if (m.data and m.data.wind_speed) else 0,
+            "w_gst": m.data.wind_gust.value if (m.data and m.data.wind_gust) else 0,
+            "raw_m": m.raw or "N/A", "raw_t": t.raw or "N/A",
+            "f_issues": w_issues, "f_time": w_time, "f_wind_spd": f_wind_spd, "f_wind_dir": f_wind_dir, "f_prob": w_prob
+        }
     return processed
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours)
 
-# 8. MAP LOGIC
+# 9. UI RENDER PREP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
@@ -209,7 +209,7 @@ for iata, info in base_airports.items():
     raw_m = data['raw_m'].upper()
     if re.search(r'\bFG\b', raw_m): m_issues.append("FOG")
     if re.search(r'\bSN\b|\bFZ', raw_m): m_issues.append("WINTER")
-    if data['vis'] < v_lim: m_issues.append("VIS")
+    if data.get('vis', 9999) < v_lim: m_issues.append("VIS")
     if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD")
     if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA")
     if xw >= 25: m_issues.append("XWIND")
@@ -227,11 +227,6 @@ for iata, info in base_airports.items():
     rwy_text = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     if m_issues: metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
     if data['f_issues']: taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
-
-    # Apply Tactical Filter
-    all_summary = "/".join(m_issues) + "".join(data['f_issues'])
-    if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
-    elif hazard_filter != "Show All Network" and hazard_filter not in all_summary: continue
 
     # MEGA-HOVER CONTENT
     shared_content = f"""
@@ -255,7 +250,7 @@ for iata, info in base_airports.items():
     """
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
-# 9. UI RENDER
+# 10. UI RENDER
 st.markdown(f'<div class="ba-header"><div>OCC WINTER HUD</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter", scrollWheelZoom=False)
 for mkr in map_markers:
@@ -264,9 +259,9 @@ for mkr in map_markers:
         popup=folium.Popup(mkr['content'], max_width=550), 
         tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)
     ).add_to(m)
-st_folium(m, width=1200, height=1200, key="map_mega_v284")
+st_folium(m, width=1200, height=1200, key="map_stable_v285")
 
-# 10. ALERTS & STRATEGY (RESTORED FROM v28.2)
+# ALERTS
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(5)
@@ -282,13 +277,12 @@ if taf_alerts:
             p_tag = " prob" if d['prob'] else ""
             if st.button(f"{iata} {d['time']} {d['type']}{p_tag}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
 
-# 11. STRATEGY BRIEF & ALTERNATE ENGINE (RESTORED)
+# 11. STRATEGY BRIEF & ALTERNATE ENGINE
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
     xw_val = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
-    
     alt_list = []
     for g in green_stations:
         if g != iata:
@@ -326,4 +320,4 @@ if st.session_state.investigate_iata != "None":
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 h_txt = f"HANDOVER {datetime.now().strftime('%H:%M')}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v284", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log_v285", label_visibility="collapsed")

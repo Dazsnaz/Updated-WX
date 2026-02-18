@@ -5,90 +5,91 @@ import requests
 from datetime import datetime
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC Hybrid HUD", page_icon="✈️")
+st.set_page_config(layout="wide", page_title="BA OCC Express HUD", page_icon="✈️")
 
-# 2. CSS STYLING
+# 2. CSS STYLING (NAVY & RED)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
     .ba-header { background-color: #002366; padding: 20px; border: 2px solid #d6001a; display: flex; justify-content: space-between; border-radius: 8px;}
-    [data-testid="stSidebar"] { background-color: #002366 !important; border-right: 3px solid #d6001a; min-width: 400px !important; }
+    [data-testid="stSidebar"] { background-color: #002366 !important; border-right: 3px solid #d6001a; min-width: 350px !important; }
+    .stMetric { background-color: #001a33; border-left: 5px solid #d6001a; padding: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. OPENSKY ENGINE (Safe Altitude Logic)
+# 3. OPENSKY DATA ENGINE
 @st.cache_data(ttl=30)
-def fetch_opensky_fleet():
+def fetch_filtered_fleet():
     fleet = []
     try:
-        # Bounding box for UK/Europe: min lat, min lon, max lat, max lon
-        # Using a direct URL parameter format
-        url = "https://opensky-network.org/api/states/all?lamin=45.0&lomin=-15.0&lamax=62.0&lomax=15.0"
+        # Broad European/UK box
+        url = "https://opensky-network.org/api/states/all?lamin=35.0&lomin=-15.0&lamax=65.0&lomax=20.0"
         r = requests.get(url, timeout=5)
         data = r.json()
         
         if "states" in data and data["states"]:
             for s in data["states"]:
-                # OpenSky Index Map: 1=Callsign, 5=Lon, 6=Lat, 7=GeoAlt, 8=OnGround
                 call = (s[1] or "").strip().upper()
                 if not call: continue
                 
                 f_type = None
                 if call.startswith("CFE"): f_type = "CFE"
                 elif call.startswith("EFW"): f_type = "EFW"
-                elif call.startswith("BAW"): f_type = "BAW"
+                elif call.startswith("BAW") or call.startswith("SHT"): f_type = "BAW"
                 
                 if f_type:
-                    # SAFE ALTITUDE CHECK: Fallback to 0 if None
                     raw_alt = s[7] if s[7] is not None else 0
-                    alt_ft = round(raw_alt * 3.28084)
-                    
                     fleet.append({
                         "callsign": call,
-                        "lat": s[6],
-                        "lon": s[5],
+                        "lat": s[6], "lon": s[5],
                         "type": f_type,
-                        "alt": alt_ft,
+                        "alt": round(raw_alt * 3.28084),
                         "ground": s[8]
                     })
-    except Exception as e:
-        pass 
+    except: pass
     return fleet
 
 # 4. EXECUTION
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.32 | FLEET RECOVERY</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.33 | EXPRESS FILTER</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 
-live_fleet = fetch_opensky_fleet()
+live_data = fetch_filtered_fleet()
 
 with st.sidebar:
-    st.title("🛡️ HYBRID FEED")
-    if st.button("🔄 REFRESH FLEET"): st.cache_data.clear(); st.rerun()
+    st.title("🛡️ FLEET CONTROL")
+    if st.button("🔄 REFRESH"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
     
-    cfe_c = len([p for p in live_fleet if p['type'] == "CFE"])
-    efw_c = len([p for p in live_fleet if p['type'] == "EFW"])
-    ba_c = len([p for p in live_fleet if p['type'] == "BAW"])
+    # FILTER TOGGLE
+    view_mode = st.radio("View Mode:", ["BA Express Only (CFE/EFW)", "Show All BA Group"], index=0)
     
-    st.metric("Cityflyer (CFE)", cfe_c)
-    st.metric("Euroflyer (EFW)", efw_c)
-    st.metric("Mainline (BAW)", ba_c)
+    st.markdown("---")
+    cfe_fleet = [p for p in live_data if p['type'] == "CFE"]
+    efw_fleet = [p for p in live_data if p['type'] == "EFW"]
     
-    if live_fleet:
+    st.metric("Cityflyer (CFE)", len(cfe_fleet))
+    st.metric("Euroflyer (EFW)", len(efw_fleet))
+    
+    if live_data:
         st.markdown("### Active Callsigns")
-        for p in live_fleet:
-            status = "✈️" if not p['ground'] else "🚧"
-            st.code(f"{status} {p['callsign']} @ {p['alt']}ft")
+        display_list = cfe_fleet + efw_fleet if "Express" in view_mode else live_data
+        for p in display_list:
+            st.code(f"{p['callsign']} @ {p['alt']}ft")
 
 # 5. MAP RENDER
-m = folium.Map(location=[52.5, -1.0], zoom_start=6, tiles="CartoDB dark_matter")
+m = folium.Map(location=[52.5, 0.0], zoom_start=6, tiles="CartoDB dark_matter")
 
-for p in live_fleet:
-    color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "cadetblue")
-    folium.Marker(
-        location=[p['lat'], p['lon']],
-        icon=folium.Icon(color=color, icon="plane", prefix="fa"),
-        tooltip=f"{p['callsign']} | Alt: {p['alt']}ft"
-    ).add_to(m)
+if live_data:
+    for p in live_data:
+        # Logic: If 'Express Only' is on, skip BAW
+        if "Express" in view_mode and p['type'] == "BAW":
+            continue
+            
+        color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "cadetblue")
+        folium.Marker(
+            location=[p['lat'], p['lon']],
+            icon=folium.Icon(color=color, icon="plane", prefix="fa"),
+            tooltip=f"{p['callsign']} | {p['alt']}ft"
+        ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="v35_32_hybrid")
+st_folium(m, width=1200, height=800, key="v35_33_filter")

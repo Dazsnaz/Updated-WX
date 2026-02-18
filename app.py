@@ -1,79 +1,84 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-from fr24sdk.client import Client 
+import requests
 from datetime import datetime
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC Final Probe")
+st.set_page_config(layout="wide", page_title="BA OCC Hybrid HUD")
 
-# 2. CSS STYLING
+# 2. CSS STYLING (NAVY/RED)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    .ba-header { background-color: #002366; padding: 20px; border: 2px solid #d6001a; display: flex; justify-content: space-between; }
+    .ba-header { background-color: #002366; padding: 20px; border: 2px solid #d6001a; display: flex; justify-content: space-between; border-radius: 8px;}
     [data-testid="stSidebar"] { background-color: #002366 !important; border-right: 3px solid #d6001a; min-width: 400px !important; }
-    .status-card { background-color: #111; padding: 15px; border-radius: 5px; border: 1px solid #444; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. YOUR TOKEN
-LIVE_TOKEN = "019c7003-96dc-7061-aacf-54bfde6a7847|wb9k84G45pNBUFJJppAywj8kjMzVcOqmAst0D0o9f98666e1"
-
-# 4. DATA ENGINE
-@st.cache_data(ttl=60)
-def final_data_probe():
+# 3. OPENSKY ENGINE (Free Commercial Data)
+@st.cache_data(ttl=30)
+def fetch_opensky_fleet():
     fleet = []
-    api_log = "Initializing..."
     try:
-        # We specify the client with no extra sandbox flags to ensure we are hitting the production gate
-        with Client(api_token=LIVE_TOKEN) as client:
-            # Huge box covering all UK/Europe flight paths
-            bounds = "62.0,35.0,-15.0,15.0"
-            flights = client.live.flight_positions.get_light(bounds=bounds)
-            
-            if flights and flights.data:
-                api_log = f"SUCCESS: Received {len(flights.data)} flights."
-                for f in flights.data:
-                    call = (getattr(f, 'callsign', "") or getattr(f, 'flight', "") or "???").upper()
-                    
-                    # Filtering for BA Group
-                    f_tag = "OTHER"
-                    if any(x in call for x in ["CFE", "EFW", "BAW", "SHT"]):
-                        f_tag = "BA_GROUP"
-                    
-                    fleet.append({"call": call, "lat": f.lat, "lon": f.lon, "type": f_tag})
-            else:
-                api_log = "EMPTY: No flights returned in this region."
-    except Exception as e:
-        api_log = f"DENIED: {str(e)}"
-    
-    return fleet, api_log
+        # Tighter box over UK/Europe for faster loading: N, S, W, E
+        url = "https://opensky-network.org/api/states/all?lamin=48.0&lamin=30.0&lamax=60.0&lomin=-15.0&lomax=10.0"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+        
+        if "states" in data and data["states"]:
+            for s in data["states"]:
+                call = (s[1] or "").strip().upper()
+                if not call: continue
+                
+                f_type = None
+                if call.startswith("CFE"): f_type = "CFE"
+                elif call.startswith("EFW"): f_type = "EFW"
+                elif call.startswith("BAW"): f_type = "BAW"
+                
+                if f_type:
+                    fleet.append({
+                        "callsign": call,
+                        "lat": s[6],
+                        "lon": s[5],
+                        "type": f_type,
+                        "alt": s[7] # Altitude in meters
+                    })
+    except: pass
+    return fleet
 
-# 5. EXECUTION
-traffic, log_msg = final_data_probe()
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.30</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+# 4. EXECUTION
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.31 | HYBRID DATA</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 
-# 6. SIDEBAR
+live_fleet = fetch_opensky_fleet()
+
 with st.sidebar:
-    st.title("🛡️ SUBSCRIPTION VERIFIER")
-    if st.button("🔄 REFRESH"): st.cache_data.clear(); st.rerun()
+    st.title("🛡️ HYBRID FEED")
+    if st.button("🔄 REFRESH FLEET"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
     
-    st.markdown(f'<div class="status-card"><b>API Log:</b><br>{log_msg}</div>', unsafe_allow_html=True)
+    cfe_c = len([p for p in live_fleet if p['type'] == "CFE"])
+    efw_c = len([p for p in live_fleet if p['type'] == "EFW"])
     
-    ba_count = len([p for p in traffic if p['type'] == "BA_GROUP"])
-    st.metric("BA Group Detected", ba_count)
+    st.metric("Cityflyer (OpenSky)", cfe_c)
+    st.metric("Euroflyer (OpenSky)", efw_c)
     
-    if ba_count == 0 and "SUCCESS" in log_msg:
-        st.error("Explorer Plan Restriction: You are seeing 'Traffic', but FR24 is filtering out all Scheduled Airlines (CFE/EFW).")
-    elif "DENIED" in log_msg:
-        st.warning("Auth Failure: The token is not valid for this SDK version.")
+    st.markdown("---")
+    st.info("Note: OpenSky data is crowdsourced. If an aircraft is out of range of a ground station, it may disappear for a few minutes.")
 
-# 7. MAP
-m = folium.Map(location=[51.5, 0.0], zoom_start=6, tiles="CartoDB dark_matter")
-for p in traffic:
-    color = "blue" if p['type'] == "BA_GROUP" else "gray"
-    folium.Marker([p['lat'], p['lon']], tooltip=p['call'], icon=folium.Icon(color=color)).add_to(m)
-st_folium(m, width=1200, height=800, key="v35_30")
+# 5. MAP RENDER
+m = folium.Map(location=[52.5, -1.0], zoom_start=6, tiles="CartoDB dark_matter")
+
+if live_fleet:
+    for p in live_fleet:
+        color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "cadetblue")
+        folium.Marker(
+            location=[p['lat'], p['lon']],
+            icon=folium.Icon(color=color, icon="plane", prefix="fa"),
+            tooltip=f"{p['callsign']} | Alt: {round(p['alt']*3.28084)}ft"
+        ).add_to(m)
+else:
+    st.warning("Scanning for CFE/EFW transponders via OpenSky... No matches in UK airspace currently.")
+
+st_folium(m, width=1200, height=800, key="v35_31_hybrid")

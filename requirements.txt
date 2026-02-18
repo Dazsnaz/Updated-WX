@@ -1,4 +1,4 @@
-FlightRadar24-API
+fr24sdk
 avwx-engine
 folium
 streamlit-folium

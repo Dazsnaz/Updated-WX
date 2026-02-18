@@ -16,7 +16,7 @@ except ImportError:
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# [cite_start]2. STABLE v29.2 CSS (LOCKED) [cite: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+# 2. STABLE v29.2 CSS (RE-LOCKED)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -47,7 +47,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# [cite_start]3. UTILITIES [cite: 18]
+# 3. UTILITIES
 def calculate_dist(lat1, lon1, lat2, lon2):
     R = 3440.065 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -67,7 +67,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
     return text
 
-# [cite_start]4. MASTER DATABASE [cite: 19, 20, 21, 22, 23, 24, 25, 26]
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -77,16 +77,18 @@ base_airports = {
     "STN": {"icao": "EGSS", "lat": 51.885, "lon": 0.235, "rwy": 220, "fleet": "Cityflyer", "spec": False},
     "DUB": {"icao": "EIDW", "lat": 53.421, "lon": -6.270, "rwy": 280, "fleet": "Cityflyer", "spec": False},
     "FLR": {"icao": "LIRQ", "lat": 43.810, "lon": 11.205, "rwy": 50, "fleet": "Cityflyer", "spec": True},
+    "ZRH": {"icao": "LSZH", "lat": 47.458, "lon": 8.548, "rwy": 160, "fleet": "Cityflyer", "spec": False},
+    "GVA": {"icao": "LSGG", "lat": 46.237, "lon": 6.109, "rwy": 220, "fleet": "Cityflyer", "spec": False},
+    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
     "FNC": {"icao": "LPMA", "lat": 32.694, "lon": -16.774, "rwy": 50, "fleet": "Euroflyer", "spec": True},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
-    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
 }
 
 # 5. SESSION STATE
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# [cite_start]6. SIDEBAR [cite: 27, 28]
+# 6. SIDEBAR
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
     if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
@@ -95,24 +97,24 @@ with st.sidebar:
     st.markdown("✈️ **FLEET TRACKING**")
     if not FR_AVAILABLE:
         st.error("Missing dependency: FlightRadar24")
-        st.info("Please add 'FlightRadar24' to your requirements.txt file.")
+        st.info("Add 'FlightRadar24-API' to your requirements.txt")
         show_fleet = False
     else:
         show_fleet = st.checkbox("Live CFE/EFW Tracking", value=True)
 
     st.markdown("---")
     time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
-    horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
     xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
 
-# [cite_start]7. DATA FETCH [cite: 29, 30, 31, 32, 33, 34, 35, 36, 37, 38]
+# 7. DATA FETCH
 @st.cache_data(ttl=60)
 def get_live_fleet():
     if not FR_AVAILABLE or not show_fleet: return []
     try:
         fr = FlightRadar24API()
+        # Fetch flights for both Euroflyer and Cityflyer
         return fr.get_flights(airline="CFE") + fr.get_flights(airline="EFW")
     except: return []
 
@@ -156,7 +158,7 @@ def process_weather(bundle, airport_dict, horizon, xw_thresh):
 
 weather_data = process_weather(weather_bundle, base_airports, horizon_hours, xw_limit)
 
-# [cite_start]8. UI LOOP [cite: 39, 40, 41, 42, 43, 44, 45]
+# 8. UI LOOP
 metar_alerts, markers = {}, []
 for iata, info in base_airports.items():
     d = weather_data.get(iata)
@@ -176,14 +178,14 @@ for iata, info in base_airports.items():
     markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": content})
 
 # 9. RENDER MAP
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.2</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.3</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=5, tiles="CartoDB dark_matter")
 
-# Stations
+# Add Stations
 for mkr in markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=450)).add_to(m)
 
-# Fleet tracking logic
+# Add Fleet tracking (Safe Import Logic)
 if show_fleet:
     active_fleet = get_live_fleet()
     for p in active_fleet:
@@ -195,9 +197,9 @@ if show_fleet:
             popup=folium.Popup(f"<div style='color:black;'><b>{p.callsign}</b><br>DEST: {dest}<hr><b>ARR WX:</b><br>{dest_wx}</div>", max_width=250)
         ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="stable_map_v352")
+st_folium(m, width=1200, height=800, key="stable_map_v353")
 
-# [cite_start]10. ALERTS & BRIEF [cite: 46, 47, 48, 49, 50, 51, 52, 53]
+# 10. ALERTS & BRIEF
 if metar_alerts:
     st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
     cols = st.columns(5)

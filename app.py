@@ -5,9 +5,9 @@ import requests
 from datetime import datetime
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC Hybrid HUD")
+st.set_page_config(layout="wide", page_title="BA OCC Hybrid HUD", page_icon="✈️")
 
-# 2. CSS STYLING (NAVY/RED)
+# 2. CSS STYLING
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -17,18 +17,20 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. OPENSKY ENGINE (Free Commercial Data)
+# 3. OPENSKY ENGINE (Safe Altitude Logic)
 @st.cache_data(ttl=30)
 def fetch_opensky_fleet():
     fleet = []
     try:
-        # Tighter box over UK/Europe for faster loading: N, S, W, E
-        url = "https://opensky-network.org/api/states/all?lamin=48.0&lamin=30.0&lamax=60.0&lomin=-15.0&lomax=10.0"
+        # Bounding box for UK/Europe: min lat, min lon, max lat, max lon
+        # Using a direct URL parameter format
+        url = "https://opensky-network.org/api/states/all?lamin=45.0&lomin=-15.0&lamax=62.0&lomax=15.0"
         r = requests.get(url, timeout=5)
         data = r.json()
         
         if "states" in data and data["states"]:
             for s in data["states"]:
+                # OpenSky Index Map: 1=Callsign, 5=Lon, 6=Lat, 7=GeoAlt, 8=OnGround
                 call = (s[1] or "").strip().upper()
                 if not call: continue
                 
@@ -38,18 +40,24 @@ def fetch_opensky_fleet():
                 elif call.startswith("BAW"): f_type = "BAW"
                 
                 if f_type:
+                    # SAFE ALTITUDE CHECK: Fallback to 0 if None
+                    raw_alt = s[7] if s[7] is not None else 0
+                    alt_ft = round(raw_alt * 3.28084)
+                    
                     fleet.append({
                         "callsign": call,
                         "lat": s[6],
                         "lon": s[5],
                         "type": f_type,
-                        "alt": s[7] # Altitude in meters
+                        "alt": alt_ft,
+                        "ground": s[8]
                     })
-    except: pass
+    except Exception as e:
+        pass 
     return fleet
 
 # 4. EXECUTION
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.31 | HYBRID DATA</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.32 | FLEET RECOVERY</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 
 live_fleet = fetch_opensky_fleet()
 
@@ -60,25 +68,27 @@ with st.sidebar:
     
     cfe_c = len([p for p in live_fleet if p['type'] == "CFE"])
     efw_c = len([p for p in live_fleet if p['type'] == "EFW"])
+    ba_c = len([p for p in live_fleet if p['type'] == "BAW"])
     
-    st.metric("Cityflyer (OpenSky)", cfe_c)
-    st.metric("Euroflyer (OpenSky)", efw_c)
+    st.metric("Cityflyer (CFE)", cfe_c)
+    st.metric("Euroflyer (EFW)", efw_c)
+    st.metric("Mainline (BAW)", ba_c)
     
-    st.markdown("---")
-    st.info("Note: OpenSky data is crowdsourced. If an aircraft is out of range of a ground station, it may disappear for a few minutes.")
+    if live_fleet:
+        st.markdown("### Active Callsigns")
+        for p in live_fleet:
+            status = "✈️" if not p['ground'] else "🚧"
+            st.code(f"{status} {p['callsign']} @ {p['alt']}ft")
 
 # 5. MAP RENDER
 m = folium.Map(location=[52.5, -1.0], zoom_start=6, tiles="CartoDB dark_matter")
 
-if live_fleet:
-    for p in live_fleet:
-        color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "cadetblue")
-        folium.Marker(
-            location=[p['lat'], p['lon']],
-            icon=folium.Icon(color=color, icon="plane", prefix="fa"),
-            tooltip=f"{p['callsign']} | Alt: {round(p['alt']*3.28084)}ft"
-        ).add_to(m)
-else:
-    st.warning("Scanning for CFE/EFW transponders via OpenSky... No matches in UK airspace currently.")
+for p in live_fleet:
+    color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "cadetblue")
+    folium.Marker(
+        location=[p['lat'], p['lon']],
+        icon=folium.Icon(color=color, icon="plane", prefix="fa"),
+        tooltip=f"{p['callsign']} | Alt: {p['alt']}ft"
+    ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="v35_31_hybrid")
+st_folium(m, width=1200, height=800, key="v35_32_hybrid")

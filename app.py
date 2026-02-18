@@ -6,17 +6,10 @@ import math
 import re
 from datetime import datetime, timedelta, timezone
 
-# --- SECTION 1: API SAFETY WRAPPER ---
-try:
-    from FlightRadar24 import FlightRadar24API
-    FR_AVAILABLE = True
-except ImportError:
-    FR_AVAILABLE = False
-
-# 1. PAGE CONFIG [cite: 1]
+# [cite_start]1. PAGE CONFIG [cite: 1]
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. STABLE v29.2 CSS RESTORATION 
+# [cite_start]2. STABLE v29.2 CSS [cite: 2, 12, 15]
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -44,7 +37,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. UTILITIES [cite: 18]
+# [cite_start]3. UTILITIES [cite: 18]
 def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     if wind_dir is None or wind_spd is None or rwy_hdg is None: return 0
     angle = math.radians(wind_dir - rwy_hdg)
@@ -57,7 +50,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE [cite: 19-26]
+# [cite_start]4. MASTER DATABASE [cite: 19-26]
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -75,34 +68,17 @@ base_airports = {
 # 5. SESSION STATE
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 6. ASYNC FLEET DATA FETCH
-@st.cache_data(ttl=60)
-def fetch_protected_fleet():
-    if not FR_AVAILABLE: return [], 0, 0
-    try:
-        fr = FlightRadar24API()
-        cfe = fr.get_flights(airline="CFE")
-        efw = fr.get_flights(airline="EFW")
-        return (cfe + efw), len(cfe), len(efw)
-    except:
-        return [], 0, 0
-
-active_fleet, cfe_airborne, efw_airborne = fetch_protected_fleet()
-
-# 7. SIDEBAR [cite: 27, 28]
+# [cite_start]6. SIDEBAR [cite: 27, 28]
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
-    if st.button("🔄 REFRESH DATA"): st.cache_data.clear(); st.rerun()
-    st.markdown("---")
-    st.markdown(f"✈️ **CFE Airborne:** {cfe_airborne}")
-    st.markdown(f"✈️ **EFW Airborne:** {efw_airborne}")
-    show_fleet = st.checkbox("Track Live Fleet", value=True)
+    if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
+    map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 8. WEATHER DATA [cite: 29]
+# [cite_start]7. WEATHER DATA [cite: 29]
 @st.cache_data(ttl=1800)
 def get_weather(airport_dict):
     res = {}
@@ -115,10 +91,9 @@ def get_weather(airport_dict):
 
 weather_bundle = get_weather(base_airports)
 
-# 9. PROCESSOR [cite: 30-38]
-def process_data(bundle, airport_dict, limit, xw_thresh):
+# [cite_start]8. PROCESSOR [cite: 30-38]
+def process_data(bundle, airport_dict, xw_thresh):
     proc = {}
-    cutoff = datetime.now(timezone.utc) + timedelta(hours=limit)
     for iata, data in bundle.items():
         if data['status'] == "offline": continue
         m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
@@ -130,7 +105,6 @@ def process_data(bundle, airport_dict, limit, xw_thresh):
         f_issues, f_time = [], ""
         if t.data:
             for line in t.data.forecast:
-                if not line.start_time or line.start_time.dt > cutoff: continue
                 l_dir = getattr(line.wind_direction, 'value', info['rwy']) if line.wind_direction else info['rwy']
                 peak = max(getattr(line.wind_speed, 'value', 0), getattr(line.wind_gust, 'value', 0))
                 if calculate_xwind(l_dir, peak, info['rwy']) >= xw_thresh: f_issues.append("XWIND")
@@ -140,9 +114,9 @@ def process_data(bundle, airport_dict, limit, xw_thresh):
         proc[iata] = {"w_dir": m_w_dir, "w_spd": m_w_spd, "w_gst": m_w_gst, "raw_m": m.raw, "raw_t": t.raw, "f_issues": f_issues, "f_time": f_time}
     return proc
 
-weather_data = process_data(weather_bundle, base_airports, 6, xw_limit)
+weather_data = process_data(weather_bundle, base_airports, xw_limit)
 
-# 10. MAP UI [cite: 39-45]
+# [cite_start]9. UI LOOP [cite: 39-45]
 metar_alerts, markers = {}, []
 for iata, info in base_airports.items():
     d = weather_data.get(iata)
@@ -155,29 +129,22 @@ for iata, info in base_airports.items():
     color = "#008000"
     if m_issues: color = "#d6001a" if any(x in m_issues for x in ["WINTER","XWIND"]) else "#eb8f34"
     elif d['f_issues']: color = "#eb8f34"
+    
     if m_issues: metar_alerts[iata] = "/".join(m_issues)
 
     content = f"""<div style="width:300px; color:black; background:white; padding:10px;"><b>{iata}</b><hr>Actual XW: {xw}KT</div>"""
     markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": content})
 
-# 11. RENDER HUD
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.6 (Stable)</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
-m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles="CartoDB dark_matter")
+# 10. RENDER
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.7 (Emergency Recovery)</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"))
 
 for mkr in markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'])).add_to(m)
 
-if show_fleet and active_fleet:
-    for p in active_fleet:
-        folium.Marker(
-            location=[p.latitude, p.longitude],
-            icon=folium.Icon(color="red" if p.airline_icao == "EFW" else "blue", icon="plane", prefix="fa"),
-            tooltip=f"{p.callsign} Destination: {p.destination_airport_icao}"
-        ).add_to(m)
+st_folium(m, width=1200, height=800, key="recovery_map")
 
-st_folium(m, width=1200, height=800, key="protected_map")
-
-# 12. ALERTS & BRIEF [cite: 46-53]
+# [cite_start]11. ALERTS & BRIEF [cite: 46-53]
 if metar_alerts:
     st.markdown('<div class="section-header">🔴 Actual Alerts</div>', unsafe_allow_html=True)
     cols = st.columns(5)

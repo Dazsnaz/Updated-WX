@@ -85,39 +85,43 @@ base_airports = {
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. SESSION STATE
-if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
-
-# 6. SIDEBAR
-with st.sidebar:
-    st.title("🛠️ COMMAND HUD")
-    if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
-    st.markdown("---")
-    
-    st.markdown("✈️ **FLEET TRACKING**")
-    if not FR_AVAILABLE:
-        st.error("Missing dependency: FlightRadar24")
-        st.info("Add 'FlightRadar24-API' to your requirements.txt")
-        show_fleet = False
-    else:
-        show_fleet = st.checkbox("Live CFE/EFW Tracking", value=True)
-
-    st.markdown("---")
-    time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
-    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
-    show_cf = st.checkbox("Cityflyer (CFE)", value=True)
-    show_ef = st.checkbox("Euroflyer (EFW)", value=True)
-
-# 7. DATA FETCH
+# 5. DATA FETCH (FLEET)
 @st.cache_data(ttl=60)
-def get_live_fleet():
-    if not FR_AVAILABLE or not show_fleet: return []
+def get_fleet_data():
+    if not FR_AVAILABLE: return [], 0, 0
     try:
         fr = FlightRadar24API()
-        # Fetch flights for both Euroflyer and Cityflyer
-        return fr.get_flights(airline="CFE") + fr.get_flights(airline="EFW")
-    except: return []
+        cfe = fr.get_flights(airline="CFE")
+        efw = fr.get_flights(airline="EFW")
+        return (cfe + efw), len(cfe), len(efw)
+    except:
+        return [], 0, 0
 
+# 6. SESSION STATE
+if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
+
+# 7. SIDEBAR
+active_fleet, cfe_count, efw_count = get_fleet_data()
+
+with st.sidebar:
+    st.title("🛠️ COMMAND HUD")
+    if st.button("🔄 REFRESH ALL DATA"): st.cache_data.clear(); st.rerun()
+    st.markdown("---")
+    
+    # LIVE FLEET SUMMARY
+    st.markdown("📊 **FLEET STATUS**")
+    st.write(f"✈️ Cityflyer (CFE): **{cfe_count}**")
+    st.write(f"✈️ Euroflyer (EFW): **{efw_count}**")
+    show_fleet = st.checkbox("Show Aircraft on Map", value=True)
+    st.markdown("---")
+    
+    time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
+    horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
+    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
+    show_cf = st.checkbox("Display CFE Stations", value=True)
+    show_ef = st.checkbox("Display EFW Stations", value=True)
+
+# 8. WEATHER DATA FETCH
 @st.cache_data(ttl=1800)
 def get_weather(airport_dict):
     res = {}
@@ -152,13 +156,13 @@ def process_weather(bundle, airport_dict, horizon, xw_thresh):
             "w_spd": getattr(m.data.wind_speed, 'value', 0),
             "w_gst": getattr(m.data.wind_gust, 'value', 0),
             "raw_m": m.raw or "N/A", "raw_t": t.raw or "N/A",
-            "f_issues": f_issues, "f_time": f_time
+            "f_issues": list(set(f_issues)), "f_time": f_time
         }
     return proc
 
 weather_data = process_weather(weather_bundle, base_airports, horizon_hours, xw_limit)
 
-# 8. UI LOOP
+# 9. UI LOOP
 metar_alerts, markers = {}, []
 for iata, info in base_airports.items():
     d = weather_data.get(iata)
@@ -177,19 +181,18 @@ for iata, info in base_airports.items():
     content = f"""<div style="width:400px; color:black; background:white; padding:10px; border-radius:5px;"><b>{iata} STATUS</b><hr><b>Actual XW: {xw} KT</b><br>{d['raw_m']}</div>"""
     markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": content})
 
-# 9. RENDER MAP
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.3</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+# 10. RENDER HUD
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.4 | STABLE FLEET</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=5, tiles="CartoDB dark_matter")
 
-# Add Stations
+# Stations
 for mkr in markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=450)).add_to(m)
 
-# Add Fleet tracking (Safe Import Logic)
-if show_fleet:
-    active_fleet = get_live_fleet()
+# Fleet tracking logic
+if show_fleet and FR_AVAILABLE:
     for p in active_fleet:
-        dest = p.destination_airport_icao[-3:] # Get IATA
+        dest = p.destination_airport_icao[-3:]
         dest_wx = weather_data.get(dest, {}).get('raw_m', "N/A")
         folium.Marker(
             location=[p.latitude, p.longitude],
@@ -197,9 +200,9 @@ if show_fleet:
             popup=folium.Popup(f"<div style='color:black;'><b>{p.callsign}</b><br>DEST: {dest}<hr><b>ARR WX:</b><br>{dest_wx}</div>", max_width=250)
         ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="stable_map_v353")
+st_folium(m, width=1200, height=800, key="stable_map_v354")
 
-# 10. ALERTS & BRIEF
+# 11. ALERTS & BRIEF
 if metar_alerts:
     st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
     cols = st.columns(5)

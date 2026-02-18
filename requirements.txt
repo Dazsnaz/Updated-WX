@@ -1,4 +1,4 @@
-streamlit
+FlightRadar24
+avwx-engine
 folium
 streamlit-folium
-avwx-engine

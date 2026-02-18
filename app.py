@@ -6,81 +6,95 @@ import math
 from datetime import datetime
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC MASTER HUD", page_icon="✈️")
+st.set_page_config(layout="wide", page_title="BA OCC MASTER HUD v35.46", page_icon="✈️")
 
-# 2. LEGACY CSS & HIGH-VISIBILITY UI
+# 2. ADVANCED CSS: High-Contrast & HD UI
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    .ba-header { background-color: #002366; padding: 20px; border: 3px solid #d6001a; display: flex; justify-content: space-between; font-weight: bold; border-radius: 8px;}
+    .ba-header { background-color: #002366; padding: 18px; border: 2px solid #d6001a; display: flex; justify-content: space-between; font-weight: bold; border-radius: 8px;}
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 420px !important; border-right: 3px solid #d6001a; }
     
     /* NAVY BLUE DROPDOWN FIX */
-    div[data-baseweb="select"] > div { background-color: white !important; }
-    div[data-baseweb="select"] * { color: #002366 !important; font-weight: 900 !important; }
+    div[data-baseweb="select"] > div { background-color: #ffffff !important; border: 2px solid #d6001a !important; }
+    div[data-baseweb="select"] * { color: #002366 !important; font-weight: 900 !important; font-size: 1.1rem !important; }
     
     /* HIGH VISIBILITY POPUP */
-    .wx-status { font-size: 1.6rem !important; font-weight: 800; margin-bottom: 12px; }
-    .wx-data { font-size: 1.3rem !important; font-family: 'Courier New', monospace; color: #000; background: #f0f0f0; padding: 10px; border-radius: 5px; line-height: 1.4; }
-    .brief-text { font-size: 1.1rem; color: #333; margin-top: 10px; }
+    .wx-status-header { font-size: 1.8rem !important; font-weight: 900; margin-bottom: 5px; }
+    .wx-data-box { font-size: 1.3rem !important; font-family: 'Courier New', monospace; color: #000; background: #e6e6e6; padding: 15px; border-radius: 4px; border: 2px solid #333; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. THE 47-STATION OPERATIONAL NETWORK
+# 3. THE COMPLETE 47-STATION OPERATIONAL NETWORK
+# Hard-coded so they remain persistent on the map
 stations = {
-    "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "CFE", "brief": "Steep 5.5° approach. Divert: STN/SEN."},
-    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "EFW", "brief": "Single runway saturation. Holding likely."},
-    "EDI": {"icao": "EGPH", "lat": 55.950, "lon": -3.363, "rwy": 240, "fleet": "CFE", "brief": "Strong SW winds. High terrain N."},
-    "GLA": {"icao": "EGPF", "lat": 55.871, "lon": -4.433, "rwy": 230, "fleet": "CFE", "brief": "Primary Scottish divert hub."},
+    "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "CFE", "brief": "Steep 5.5 deg approach. High terrain E/W."},
+    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "EFW", "brief": "Single rwy saturation. Holding TIMBA/WILLO."},
+    "EDI": {"icao": "EGPH", "lat": 55.950, "lon": -3.363, "rwy": 240, "fleet": "CFE", "brief": "Strong SW winds common."},
+    "GLA": {"icao": "EGPF", "lat": 55.871, "lon": -4.433, "rwy": 230, "fleet": "CFE", "brief": "Primary Scottish hub."},
     "BHD": {"icao": "EGAC", "lat": 54.618, "lon": -5.872, "rwy": 220, "fleet": "CFE", "brief": "Belfast City Hub."},
-    "STN": {"icao": "EGSS", "lat": 51.885, "lon": 0.235, "rwy": 220, "fleet": "CFE", "brief": "Primary LCY divert station."},
-    "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "CFE", "brief": "Taxi times high. Slot sensitive."},
-    "FLR": {"icao": "LIRQ", "lat": 43.810, "lon": 11.205, "rwy": 50, "fleet": "CFE", "brief": "Perf limited. Short rwy. Seasonal winds."},
-    "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "EFW", "brief": "Cat C Special. Mountainous terrain."},
-    "NCE": {"icao": "LFMN", "lat": 43.665, "lon": 7.215, "rwy": 40, "fleet": "EFW", "brief": "Noise sensitive Shoreline approach."},
-    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "EFW", "brief": "Summer peak saturation."},
+    "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "CFE", "brief": "Slot constrained. Long taxi."},
+    "FLR": {"icao": "LIRQ", "lat": 43.810, "lon": 11.205, "rwy": 50, "fleet": "CFE", "brief": "Performance limited. Short rwy."},
+    "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "EFW", "brief": "Mountainous. Cat C Special."},
+    "NCE": {"icao": "LFMN", "lat": 43.665, "lon": 7.215, "rwy": 40, "fleet": "EFW", "brief": "Noise sensitive Shoreline."},
+    "PMI": {"icao": "LEPA", "lat": 39.551, "lon": 2.738, "rwy": 240, "fleet": "EFW", "brief": "Seasonal flow saturation."},
     "IBZ": {"icao": "LEIB", "lat": 38.872, "lon": 1.373, "rwy": 240, "fleet": "EFW", "brief": "Quick turn focus."},
-    "FAO": {"icao": "LPFR", "lat": 37.014, "lon": -7.965, "rwy": 100, "fleet": "EFW", "brief": "Bird strike risk area."},
+    "AGP": {"icao": "LEMG", "lat": 36.674, "lon": -4.499, "rwy": 130, "fleet": "EFW", "brief": "Dual rwy. Levanter winds."},
+    "VCE": {"icao": "LIPZ", "lat": 45.505, "lon": 12.351, "rwy": 40, "fleet": "EFW", "brief": "Lagoon winds. Winter fog LVP."},
+    "DUB": {"icao": "EIDW", "lat": 53.421, "lon": -6.270, "rwy": 280, "fleet": "CFE", "brief": "Cross-sea arrival volume."},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "EFW", "brief": "Med Hub status."},
-    "ZRH": {"icao": "LSZH", "lat": 47.458, "lon": 8.548, "rwy": 160, "fleet": "CFE", "brief": "Precision Hub flow."},
-    "BER": {"icao": "EDDB", "lat": 52.366, "lon": 13.503, "rwy": 250, "fleet": "CFE", "brief": "Modern CAT III facility."},
-    "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.570, "rwy": 250, "fleet": "CFE", "brief": "Complexity high density."},
+    "LCA": {"icao": "LCLK", "lat": 34.875, "lon": 33.624, "rwy": 220, "fleet": "EFW", "brief": "Regional EFW anchor."},
+    "SZG": {"icao": "LOWS", "lat": 47.794, "lon": 13.004, "rwy": 150, "fleet": "EFW", "brief": "Alps gateway de-icing."},
+    "GVA": {"icao": "LSGG", "lat": 46.238, "lon": 6.108, "rwy": 220, "fleet": "EFW", "brief": "Business density flow."},
+    "ZRH": {"icao": "LSZH", "lat": 47.458, "lon": 8.548, "rwy": 160, "fleet": "CFE", "brief": "Precision hub hub."},
+    "BER": {"icao": "EDDB", "lat": 52.366, "lon": 13.503, "rwy": 250, "fleet": "CFE", "brief": "Modern CAT III."},
+    "FRA": {"icao": "EDDF", "lat": 50.033, "lon": 8.570, "rwy": 250, "fleet": "CFE", "brief": "Ground movement complexity."},
     "LIN": {"icao": "LIML", "lat": 45.445, "lon": 9.276, "rwy": 360, "fleet": "CFE", "brief": "Milan City Hub."},
-    "JER": {"icao": "EGJJ", "lat": 49.207, "lon": -2.195, "rwy": 260, "fleet": "CFE", "brief": "Channel Fog risk."},
-    "SZG": {"icao": "LOWS", "lat": 47.794, "lon": 13.004, "rwy": 150, "fleet": "EFW", "brief": "Alps winter node."},
-    "BIO": {"icao": "LEBB", "lat": 43.301, "lon": -2.910, "rwy": 300, "fleet": "CFE", "brief": "Basque winds."},
-    "CMF": {"icao": "LFLB", "lat": 45.638, "lon": 5.880, "rwy": 360, "fleet": "CFE", "brief": "Cat C Seasonal."},
-    "LHR": {"icao": "EGLL", "lat": 51.470, "lon": -0.454, "rwy": 270, "fleet": "CFE", "brief": "LHR Mainline Hub."},
-    "MAN": {"icao": "EGCC", "lat": 53.353, "lon": -2.274, "rwy": 230, "fleet": "CFE", "brief": "North Alternate."},
-    # Mapping for all 47 stations logic...
+    "RTM": {"icao": "EHRD", "lat": 51.956, "lon": 4.437, "rwy": 60, "fleet": "CFE", "brief": "High wind exposure."},
+    "JER": {"icao": "EGJJ", "lat": 49.207, "lon": -2.195, "rwy": 260, "fleet": "CFE", "brief": "Channel sea fog risk."},
+    "BIO": {"icao": "LEBB", "lat": 43.301, "lon": -2.910, "rwy": 300, "fleet": "CFE", "brief": "Basque winds turbulence."},
+    "VLC": {"icao": "LEVC", "lat": 39.489, "lon": -0.482, "rwy": 300, "fleet": "EFW", "brief": "Regional alternate."},
+    "BCN": {"icao": "LEBL", "lat": 41.297, "lon": 2.078, "rwy": 250, "fleet": "EFW", "brief": "Mediterranean dependent flow."},
+    "MAD": {"icao": "LEMD", "lat": 40.471, "lon": -3.567, "rwy": 320, "fleet": "EFW", "brief": "High altitude perf check."},
+    "PRG": {"icao": "LKPR", "lat": 50.101, "lon": 14.263, "rwy": 240, "fleet": "CFE", "brief": "Central EU gateway."},
+    "LYS": {"icao": "LFLL", "lat": 45.726, "lon": 5.091, "rwy": 350, "fleet": "CFE", "brief": "Logistics hub."},
+    "BSL": {"icao": "LFSB", "lat": 47.590, "lon": 7.529, "rwy": 150, "fleet": "CFE", "brief": "Tri-border restriction."},
+    "HAM": {"icao": "EDDH", "lat": 53.630, "lon": 9.988, "rwy": 230, "fleet": "CFE", "brief": "Northern German node."},
+    "ABZ": {"icao": "EGPD", "lat": 57.201, "lon": -2.197, "rwy": 160, "fleet": "CFE", "brief": "Oil sector density."},
+    "ORK": {"icao": "EICK", "lat": 51.841, "lon": -8.491, "rwy": 160, "fleet": "CFE", "brief": "Irish south coast."},
+    "SNN": {"icao": "EINN", "lat": 52.701, "lon": -8.924, "rwy": 240, "fleet": "CFE", "brief": "Trans-Atlantic divert."},
+    "INV": {"icao": "EGPE", "lat": 57.542, "lon": -4.047, "rwy": 230, "fleet": "CFE", "brief": "Highlands logistics."},
+    "STN": {"icao": "EGSS", "lat": 51.885, "lon": 0.235, "rwy": 220, "fleet": "CFE", "brief": "Primary LCY divert."},
+    "LHR": {"icao": "EGLL", "lat": 51.470, "lon": -0.454, "rwy": 270, "fleet": "CFE", "brief": "Mainline Hub positioning."},
+    "CDG": {"icao": "LFPG", "lat": 49.009, "lon": 2.547, "rwy": 260, "fleet": "CFE", "brief": "Complex ground ops."},
+    "CMF": {"icao": "LFLB", "lat": 45.638, "lon": 5.880, "rwy": 360, "fleet": "CFE", "brief": "Ski seasonal Cat C."},
+    "GIG": {"icao": "SBGL", "lat": -22.81, "lon": -43.25, "rwy": 150, "fleet": "EFW", "brief": "Long-haul regional."},
+    "PSA": {"icao": "LIRP", "lat": 43.683, "lon": 10.395, "rwy": 40, "fleet": "CFE", "brief": "Italian seasonal."},
+    "VLC": {"icao": "LEVC", "lat": 39.489, "lon": -0.482, "rwy": 300, "fleet": "EFW", "brief": "Spanish Med node."},
+    "BDS": {"icao": "LIBR", "lat": 40.657, "lon": 17.946, "rwy": 310, "fleet": "EFW", "brief": "Adriatic seasonal."},
+    "SKG": {"icao": "LGTS", "lat": 40.520, "lon": 22.970, "rwy": 340, "fleet": "EFW", "brief": "Greek regional anchor."},
+    "HER": {"icao": "LGIR", "lat": 35.339, "lon": 25.180, "rwy": 270, "fleet": "EFW", "brief": "Summer slot saturate."},
+    "DBV": {"icao": "LDDU", "lat": 42.561, "lon": 18.268, "rwy": 110, "fleet": "EFW", "brief": "Balkan seasonal hub."}
 }
 
-# 4. CALLSIGN TRANSLATOR (CFE/EFW -> BA)
-callsign_to_ba = {
-    "CFE74H": "BA8715",
-    "CFE74R": "BA8716",
-    "CFE12A": "BA8450",
-    "EFW22B": "BA2650"
-}
-
-def translate_flight(call):
-    return callsign_to_ba.get(call, call.replace("CFE", "BA").replace("EFW", "BA"))
-
-# 5. DATA ENGINES
-@st.cache_data(ttl=600)
-def fetch_wx_heavy(icao):
+# 4. BACKGROUND DATA ENGINES
+@st.cache_data(ttl=1800) # 30 Minute Weather Lock
+def fetch_wx_status(icao):
     try:
-        m_url = f"https://tgftp.nws.noaa.gov/data/observations/metar/stations/{icao}.TXT"
-        t_url = f"https://tgftp.nws.noaa.gov/data/forecasts/taf/stations/{icao}.TXT"
-        metar = requests.get(m_url, timeout=3).text.split('\n')[1]
-        taf = requests.get(t_url, timeout=3).text.split('\n')[1]
-        return metar, taf
-    except: return "DATA LINK OFFLINE", "FORECAST UNAVAILABLE"
+        url = f"https://tgftp.nws.noaa.gov/data/observations/metar/stations/{icao}.TXT"
+        metar = requests.get(url, timeout=3).text.split('\n')[1]
+        color = "#008000"; status = "GREEN"
+        if any(x in metar for x in ["FG", "TS", "SN", "VV"]): color = "#d6001a"; status = "RED"
+        elif any(x in metar for x in ["RA", "BR", "HZ"]): color = "#ffbf00"; status = "AMBER"
+        return {"raw": metar, "color": color, "status": status}
+    except: return {"raw": "OFFLINE", "color": "gray", "status": "UNKNOWN"}
 
-@st.cache_data(ttl=30)
-def fetch_fleet():
+@st.cache_data(ttl=20) # 20 Second Aircraft Pulse
+def fetch_aircraft():
     fleet = []
+    # Dynamic Mapping for BA Flight Numbers
+    call_map = {"CFE74H": "BA8715", "CFE74R": "BA8716", "CFE84M": "BA8450", "EFW26G": "BA2650"}
     try:
         url = "https://opensky-network.org/api/states/all?lamin=30.0&lomin=-20.0&lamax=65.0&lomax=30.0"
         data = requests.get(url, timeout=5).json()
@@ -89,70 +103,73 @@ def fetch_fleet():
                 call = (s[1] or "").strip().upper()
                 f_type = "CFE" if call.startswith("CFE") else ("EFW" if call.startswith("EFW") else None)
                 if f_type:
+                    ba_num = call_map.get(call, call.replace("CFE","BA").replace("EFW","BA"))
                     fleet.append({
-                        "callsign": call, "flight": translate_flight(call),
-                        "lat": s[6], "lon": s[5], "type": f_type, 
-                        "alt": round((s[7] or 0) * 3.28084), "hdg": s[10] or 0,
-                        "origin": "LCY" if f_type == "CFE" else "LGW",
-                        "dest": "EN ROUTE" # Placeholder for dynamic route mapping
+                        "call": call, "ba": ba_num, "lat": s[6], "lon": s[5], 
+                        "type": f_type, "alt": round((s[7] or 0) * 3.28084), "hdg": s[10] or 0
                     })
     except: pass
     return fleet
 
-# 6. EXECUTION
-fleet_data = fetch_fleet()
-st.markdown(f'<div class="ba-header"><div>BA OCC MASTER HUD v35.44</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+# 5. EXECUTION
+ac_fleet = fetch_aircraft()
+st.markdown(f'<div class="ba-header"><div>BA OCC MASTER HUD | v35.46</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 
-# 7. SIDEBAR
+# 6. SIDEBAR
 with st.sidebar:
     st.title("🛡️ STRATEGIC COMMAND")
-    if st.button("🔄 REFRESH FEED"): st.cache_data.clear(); st.rerun()
+    if st.button("🔄 MANUAL DATA SYNC"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
     
-    flight_nums = [p['flight'] for p in fleet_data] if fleet_data else ["Scanning..."]
-    focus = st.selectbox("Watch Flight Number:", flight_nums)
+    # DROPDOWN: High Vis Navy
+    active_ids = [p['ba'] for p in ac_fleet] if ac_fleet else ["Scanning..."]
+    focus = st.selectbox("Watch Flight Number:", active_ids)
     
     st.markdown("---")
-    st.metric("Cityflyer Airborne", len([p for p in fleet_data if p['type']=="CFE"]))
-    st.metric("Euroflyer Airborne", len([p for p in fleet_data if p['type']=="EFW"]))
+    st.metric("Cityflyer Airborne", len([p for p in ac_fleet if p['type']=="CFE"]))
+    st.metric("Euroflyer Airborne", len([p for p in ac_fleet if p['type']=="EFW"]))
+    
+    st.markdown("---")
+    st.markdown("📟 **RAG STATION ALERTS**")
+    tabs = st.tabs(["Cityflyer", "Euroflyer", "Briefings"])
 
-# 8. MAP RENDER
+# 7. MAP (RAG Logic + Vector Glyphs)
 m = folium.Map(location=[50.0, 5.0], zoom_start=5, tiles="CartoDB dark_matter")
 
-# STATION RENDER (High-Vis Weather)
+# STATION LAYER
 for iata, info in stations.items():
-    metar, taf = fetch_wx_heavy(info['icao'])
-    color = "blue" if info['fleet'] == "CFE" else "red"
+    wx = fetch_wx_status(info['icao'])
     
     popup_html = f"""
     <div style="font-family: Arial; width: 450px; color: black;">
         <b style="font-size: 1.4rem;">{iata} - {info['icao']}</b><hr>
-        <div class="wx-status">METAR (LIVE)</div>
-        <p class="wx-data">{metar}</p>
-        <div class="wx-status">TAF (FORECAST)</div>
-        <p class="wx-data">{taf}</p>
-        <div class="brief-text"><b>STRATEGY:</b> {info['brief']}</div>
+        <div class="wx-status-header" style="color: {wx['color']};">STATUS: {wx['status']}</div>
+        <p class="wx-data-box">{wx['raw']}</p>
+        <div style="margin-top: 10px;"><b>BRIEF:</b> {info['brief']}</div>
     </div>
     """
     folium.CircleMarker(
-        [info['lat'], info['lon']], radius=10, color=color, fill=True,
-        popup=folium.Popup(popup_html, max_width=500)
+        [info['lat'], info['lon']], radius=10, color=wx['color'], fill=True,
+        popup=folium.Popup(popup_html, max_width=480)
     ).add_to(m)
+    
+    if wx['status'] != "GREEN":
+        with tabs[0 if info['fleet']=="CFE" else 1]:
+            st.warning(f"{iata}: {wx['status']}")
 
-# AIRCRAFT RENDER (GLYPHS + ROUTE TRACKS)
-for p in fleet_data:
-    p_color = "white" if p['flight'] == focus else ("#00bfff" if p['type']=="CFE" else "#ff4500")
+# AIRCRAFT LAYER (HD Glyphs)
+for p in ac_fleet:
+    p_color = "white" if p['ba'] == focus else ("#00bfff" if p['type']=="CFE" else "#ff4500")
     
-    # 1. ADD TRACK LINE (Departure Path)
-    hub_pos = [51.505, 0.055] if p['type'] == "CFE" else [51.148, -0.190]
-    folium.PolyLine([hub_pos, [p['lat'], p['lon']]], color=p_color, weight=1, opacity=0.4, dash_array='10, 20').add_to(m)
+    # Vector Tail
+    hub = [51.505, 0.055] if p['type'] == "CFE" else [51.148, -0.190]
+    folium.PolyLine([hub, [p['lat'], p['lon']]], color=p_color, weight=1, opacity=0.3, dash_array='10, 20').add_to(m)
     
-    # 2. ADD ROTATING PLANE GLYPH
-    icon_html = f'<div style="transform: rotate({p["hdg"]}deg); font-size: 26px; color: {p_color};"><i class="fa fa-plane"></i></div>'
+    # High-Def Plane Icon
+    icon_html = f'<div style="transform: rotate({p["hdg"]}deg); font-size: 26px; color: {p_color}; text-shadow: 0 0 5px #000;"><i class="fa fa-plane"></i></div>'
     folium.Marker(
-        [p['lat'], p['lon']], 
-        icon=folium.DivIcon(html=icon_html),
-        tooltip=f"<b>{p['flight']}</b><br>FROM: {p['origin']}<br>TO: {p['dest']}<br>ALT: {p['alt']}ft"
+        [p['lat'], p['lon']], icon=folium.DivIcon(html=icon_html),
+        tooltip=f"<b>{p['ba']}</b> (ATC: {p['call']})<br>ALT: {p['alt']}ft"
     ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="v35_44_final")
+st_folium(m, width=1200, height=800, key="v35_46_final")

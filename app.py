@@ -40,51 +40,45 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. SANDBOX FLEET FETCH (v35.11 Deep Probe)
+# 4. GLOBAL SANDBOX FETCH (v35.12 Catch-All)
 @st.cache_data(ttl=60)
-def get_sandbox_fleet():
+def get_global_sandbox_fleet():
     if not FR_AVAILABLE: return [], 0, 0, 0
     try:
-        # Using your Sandbox Access Token
         api_token = "019c4863-6b15-706f-bd15-685c4c23d6fa|HUsANXRxtSCFkmJRJ8zcdeTOkIUEJHyD4byicXD7d8ebf6e2"
         fleet_list = []
         raw_total = 0
         
         with Client(api_token=api_token) as client:
-            # Sandbox bounds may be limited; using a standard European window
-            bounds = "71.0,34.0,-15.0,35.0"
+            # Global Sandbox bounds (Covers most possible mock data zones)
+            bounds = "85.0,-85.0,-180.0,180.0"
             flights = client.live.flight_positions.get_light(bounds=bounds)
             
             if flights and flights.data:
                 raw_total = len(flights.data)
                 for f in flights.data:
-                    # Deep probe for callsigns in sandbox data fields
-                    call = getattr(f, 'callsign', "") or getattr(f, 'flight', "") or ""
+                    call = getattr(f, 'callsign', "") or getattr(f, 'flight', "") or "UKNOWN"
                     
-                    # Match CFE (Cityflyer) or EFW (Euroflyer)
-                    if "CFE" in call.upper() or "EFW" in call.upper():
-                        fleet_list.append({
-                            "callsign": call,
-                            "lat": f.latitude,
-                            "lon": f.longitude,
-                            "type": "EFW" if "EFW" in call.upper() else "CFE"
-                        })
-                    # Fallback: if list is empty, grab BAW to verify visibility
-                    elif "BAW" in call.upper():
-                        fleet_list.append({
-                            "callsign": call,
-                            "lat": f.latitude,
-                            "lon": f.longitude,
-                            "type": "BAW"
-                        })
+                    # Tagging logic
+                    f_type = "OTHER"
+                    if "CFE" in call.upper(): f_type = "CFE"
+                    elif "EFW" in call.upper(): f_type = "EFW"
+                    elif "BAW" in call.upper(): f_type = "BAW"
+                    
+                    fleet_list.append({
+                        "callsign": call,
+                        "lat": f.latitude,
+                        "lon": f.longitude,
+                        "type": f_type
+                    })
                         
         cfe = [p for p in fleet_list if p['type'] == "CFE"]
         efw = [p for p in fleet_list if p['type'] == "EFW"]
         return fleet_list, len(cfe), len(efw), raw_total
-    except Exception as e:
+    except Exception:
         return [], 0, 0, 0
 
-active_fleet, cfe_n, efw_n, api_total = get_sandbox_fleet()
+active_fleet, cfe_n, efw_n, api_total = get_global_sandbox_fleet()
 
 # 5. SIDEBAR
 with st.sidebar:
@@ -93,25 +87,27 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"✈️ **CFE Airborne:** {cfe_n}")
     st.markdown(f"✈️ **EFW Airborne:** {efw_n}")
-    st.caption(f"Sandbox Data Feed: {api_total} flights in zone")
-    show_fleet = st.checkbox("Show Aircraft on Map", value=True)
+    st.caption(f"Sandbox Data Feed: {api_total} flights total")
+    show_all = st.checkbox("Show All Sandbox Traffic", value=True)
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer Stations", value=True)
     show_ef = st.checkbox("Euroflyer Stations", value=True)
-    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
 
 # 6. RENDER MAP
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.11 (Sandbox Build)</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
-m = folium.Map(location=[52.0, 0.0], zoom_start=5, tiles="CartoDB dark_matter")
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.12 (Global Sandbox)</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+m = folium.Map(location=[52.0, 0.0], zoom_start=4, tiles="CartoDB dark_matter")
 
 # Fleet Markers Logic
-if show_fleet and active_fleet:
+if active_fleet:
     for p in active_fleet:
-        icon_color = "red" if p['type'] == "EFW" else ("blue" if p['type'] == "CFE" else "gray")
+        # If user only wants fleet, skip others. Otherwise show all.
+        if not show_all and p['type'] == "OTHER": continue
+        
+        icon_color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "gray")
         folium.Marker(
             location=[p['lat'], p['lon']],
             icon=folium.Icon(color=icon_color, icon="plane", prefix="fa"),
             tooltip=f"{p['callsign']}"
         ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="sandbox_fleet_map")
+st_folium(m, width=1200, height=800, key="global_sandbox_map")

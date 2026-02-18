@@ -40,30 +40,32 @@ def calculate_xwind(wind_dir, wind_spd, rwy_hdg):
     angle = math.radians(wind_dir - rwy_hdg)
     return round(abs(wind_spd * math.sin(angle)))
 
-# 4. GLOBAL SANDBOX FETCH (v35.12 Catch-All)
+# 4. UPDATED DATA FETCH (v35.13 - New Token & Probe)
 @st.cache_data(ttl=60)
-def get_global_sandbox_fleet():
-    if not FR_AVAILABLE: return [], 0, 0, 0
+def get_fleet_with_probe():
+    if not FR_AVAILABLE: return [], 0, 0, 0, []
     try:
-        api_token = "019c4863-6b15-706f-bd15-685c4c23d6fa|HUsANXRxtSCFkmJRJ8zcdeTOkIUEJHyD4byicXD7d8ebf6e2"
+        # Using your latest provided token
+        api_token = "019c7003-96dc-7061-aacf-54bfde6a7847|wb9k84G45pNBUFJJppAywj8kjMzVcOqmAst0D0o9f98666e1"
         fleet_list = []
-        raw_total = 0
+        raw_names = []
         
         with Client(api_token=api_token) as client:
-            # Global Sandbox bounds (Covers most possible mock data zones)
+            # Global Bounds to ensure data capture
             bounds = "85.0,-85.0,-180.0,180.0"
             flights = client.live.flight_positions.get_light(bounds=bounds)
             
             if flights and flights.data:
-                raw_total = len(flights.data)
                 for f in flights.data:
-                    call = getattr(f, 'callsign', "") or getattr(f, 'flight', "") or "UKNOWN"
+                    # Capture identifying info
+                    call = getattr(f, 'callsign', "") or getattr(f, 'flight', "") or "N/A"
+                    if call != "N/A" and len(raw_names) < 5:
+                        raw_names.append(call)
                     
-                    # Tagging logic
+                    # Filtering Logic
                     f_type = "OTHER"
                     if "CFE" in call.upper(): f_type = "CFE"
                     elif "EFW" in call.upper(): f_type = "EFW"
-                    elif "BAW" in call.upper(): f_type = "BAW"
                     
                     fleet_list.append({
                         "callsign": call,
@@ -74,33 +76,42 @@ def get_global_sandbox_fleet():
                         
         cfe = [p for p in fleet_list if p['type'] == "CFE"]
         efw = [p for p in fleet_list if p['type'] == "EFW"]
-        return fleet_list, len(cfe), len(efw), raw_total
+        return fleet_list, len(cfe), len(efw), len(fleet_list), raw_names
     except Exception:
-        return [], 0, 0, 0
+        return [], 0, 0, 0, []
 
-active_fleet, cfe_n, efw_n, api_total = get_global_sandbox_fleet()
+active_fleet, cfe_n, efw_n, api_total, probe_calls = get_fleet_with_probe()
 
 # 5. SIDEBAR
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
     if st.button("🔄 REFRESH HUD"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
+    
+    # DATA PROBE DISPLAY
+    st.markdown("📡 **API DATA PROBE**")
+    if probe_calls:
+        st.write("Found Callsigns:")
+        for c in probe_calls:
+            st.code(c)
+    else:
+        st.write("No active callsigns found.")
+    
+    st.markdown("---")
     st.markdown(f"✈️ **CFE Airborne:** {cfe_n}")
     st.markdown(f"✈️ **EFW Airborne:** {efw_n}")
-    st.caption(f"Sandbox Data Feed: {api_total} flights total")
-    show_all = st.checkbox("Show All Sandbox Traffic", value=True)
+    st.caption(f"Total flights in API packet: {api_total}")
+    show_all = st.checkbox("Show All Traffic (Debug)", value=True)
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer Stations", value=True)
     show_ef = st.checkbox("Euroflyer Stations", value=True)
 
 # 6. RENDER MAP
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.12 (Global Sandbox)</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.13</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[52.0, 0.0], zoom_start=4, tiles="CartoDB dark_matter")
 
-# Fleet Markers Logic
 if active_fleet:
     for p in active_fleet:
-        # If user only wants fleet, skip others. Otherwise show all.
         if not show_all and p['type'] == "OTHER": continue
         
         icon_color = "blue" if p['type'] == "CFE" else ("red" if p['type'] == "EFW" else "gray")
@@ -110,4 +121,4 @@ if active_fleet:
             tooltip=f"{p['callsign']}"
         ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="global_sandbox_map")
+st_folium(m, width=1200, height=800, key="v35_13_map")

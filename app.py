@@ -5,12 +5,18 @@ from avwx import Metar, Taf
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from FlightRadar24 import FlightRadar24API
+
+# --- SAFETY GUARD FOR EXTERNAL API ---
+try:
+    from FlightRadar24 import FlightRadar24API
+    FR_AVAILABLE = True
+except ImportError:
+    FR_AVAILABLE = False
 
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. STABLE v29.2 CSS (RE-LOCKED)
+# [cite_start]2. STABLE v29.2 CSS (LOCKED) [cite: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -41,7 +47,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. UTILITIES
+# [cite_start]3. UTILITIES [cite: 18]
 def calculate_dist(lat1, lon1, lat2, lon2):
     R = 3440.065 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -61,7 +67,7 @@ def bold_hazard(text):
     text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE
+# [cite_start]4. MASTER DATABASE [cite: 19, 20, 21, 22, 23, 24, 25, 26]
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -71,43 +77,45 @@ base_airports = {
     "STN": {"icao": "EGSS", "lat": 51.885, "lon": 0.235, "rwy": 220, "fleet": "Cityflyer", "spec": False},
     "DUB": {"icao": "EIDW", "lat": 53.421, "lon": -6.270, "rwy": 280, "fleet": "Cityflyer", "spec": False},
     "FLR": {"icao": "LIRQ", "lat": 43.810, "lon": 11.205, "rwy": 50, "fleet": "Cityflyer", "spec": True},
-    "ZRH": {"icao": "LSZH", "lat": 47.458, "lon": 8.548, "rwy": 160, "fleet": "Cityflyer", "spec": False},
-    "GVA": {"icao": "LSGG", "lat": 46.237, "lon": 6.109, "rwy": 220, "fleet": "Cityflyer", "spec": False},
-    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
     "INN": {"icao": "LOWI", "lat": 47.260, "lon": 11.344, "rwy": 260, "fleet": "Euroflyer", "spec": True},
     "FNC": {"icao": "LPMA", "lat": 32.694, "lon": -16.774, "rwy": 50, "fleet": "Euroflyer", "spec": True},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
+    "LGW": {"icao": "EGKK", "lat": 51.148, "lon": -0.190, "rwy": 260, "fleet": "Euroflyer", "spec": False},
 }
 
 # 5. SESSION STATE
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 6. SIDEBAR
+# [cite_start]6. SIDEBAR [cite: 27, 28]
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
     if st.button("🔄 MANUAL DATA REFRESH"): st.cache_data.clear(); st.rerun()
     st.markdown("---")
     
-    st.markdown("✈️ **LIVE FLEET TRACKING**")
-    track_cfe = st.checkbox("Track Cityflyer (CFE)", value=True)
-    track_efw = st.checkbox("Track Euroflyer (EFW)", value=True)
-    st.markdown("---")
-    
-    time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
-    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
+    st.markdown("✈️ **FLEET TRACKING**")
+    if not FR_AVAILABLE:
+        st.error("Missing dependency: FlightRadar24")
+        st.info("Please add 'FlightRadar24' to your requirements.txt file.")
+        show_fleet = False
+    else:
+        show_fleet = st.checkbox("Live CFE/EFW Tracking", value=True)
 
-# 7. FLIGHT DATA FETCH
+    st.markdown("---")
+    time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
+    horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
+    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
+    show_cf = st.checkbox("Cityflyer (CFE)", value=True)
+    show_ef = st.checkbox("Euroflyer (EFW)", value=True)
+
+# [cite_start]7. DATA FETCH [cite: 29, 30, 31, 32, 33, 34, 35, 36, 37, 38]
 @st.cache_data(ttl=60)
-def get_fleet():
+def get_live_fleet():
+    if not FR_AVAILABLE or not show_fleet: return []
     try:
         fr = FlightRadar24API()
-        active_fleet = []
-        if track_cfe: active_fleet += fr.get_flights(airline="CFE")
-        if track_efw: active_fleet += fr.get_flights(airline="EFW")
-        return active_fleet
+        return fr.get_flights(airline="CFE") + fr.get_flights(airline="EFW")
     except: return []
 
-# 8. WEATHER FETCH & PROCESS (v29.2 Logic)
 @st.cache_data(ttl=1800)
 def get_weather(airport_dict):
     res = {}
@@ -120,59 +128,76 @@ def get_weather(airport_dict):
 
 weather_bundle = get_weather(base_airports)
 
-def process_data(bundle, airport_dict, xw_thresh):
+def process_weather(bundle, airport_dict, horizon, xw_thresh):
     proc = {}
+    cutoff = datetime.now(timezone.utc) + timedelta(hours=horizon)
     for iata, data in bundle.items():
         if data['status'] == "offline": continue
         m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
         
-        m_w_dir = getattr(m.data.wind_direction, 'value', 0) if (m.data and m.data.wind_direction) else 0
-        m_w_spd = getattr(m.data.wind_speed, 'value', 0) if (m.data and m.data.wind_speed) else 0
-        m_w_gst = getattr(m.data.wind_gust, 'value', 0) if (m.data and m.data.wind_gust) else 0
-        
-        proc[iata] = {"w_dir": m_w_dir, "w_spd": m_w_spd, "w_gst": m_w_gst, "raw_m": m.raw, "raw_t": t.raw}
+        f_issues, f_time = [], ""
+        if t.data:
+            for line in t.data.forecast:
+                if not line.start_time or line.start_time.dt > cutoff: continue
+                l_dir = getattr(line.wind_direction, 'value', info['rwy']) if line.wind_direction else info['rwy']
+                peak = max(getattr(line.wind_speed, 'value', 0), getattr(line.wind_gust, 'value', 0))
+                if calculate_xwind(l_dir, peak, info['rwy']) >= xw_thresh: f_issues.append("XWIND")
+                if re.search(r'\bSN\b|\bFZ', line.raw.upper()): f_issues.append("WINTER")
+                if f_issues: f_time = f"{line.start_time.dt.strftime('%H')}Z"
+
+        proc[iata] = {
+            "w_dir": getattr(m.data.wind_direction, 'value', 0),
+            "w_spd": getattr(m.data.wind_speed, 'value', 0),
+            "w_gst": getattr(m.data.wind_gust, 'value', 0),
+            "raw_m": m.raw or "N/A", "raw_t": t.raw or "N/A",
+            "f_issues": f_issues, "f_time": f_time
+        }
     return proc
 
-weather_data = process_data(weather_bundle, base_airports, xw_limit)
+weather_data = process_weather(weather_bundle, base_airports, horizon_hours, xw_limit)
 
-# 9. UI LOOP
+# [cite_start]8. UI LOOP [cite: 39, 40, 41, 42, 43, 44, 45]
 metar_alerts, markers = {}, []
 for iata, info in base_airports.items():
     d = weather_data.get(iata)
-    if not d: continue
+    if not d or not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)): continue
     xw = calculate_xwind(d['w_dir'], max(d['w_spd'], d['w_gst']), info['rwy'])
+    m_issues = []
+    if xw >= xw_limit: m_issues.append("XWIND")
+    if re.search(r'\bSN\b|\bFZ', d['raw_m'].upper()): m_issues.append("WINTER")
     
     color = "#008000"
-    if xw >= xw_thresh: color = "#d6001a"; metar_alerts[iata] = "XWIND"
+    if m_issues: color = "#d6001a" if any(x in m_issues for x in ["WINTER","XWIND"]) else "#eb8f34"
+    elif d['f_issues']: color = "#eb8f34"
     
-    content = f"""<div style="width:400px; color:black; background:white; padding:10px;"><b>{iata} STATUS</b><hr><b>Actual XW: {xw} KT</b><br>{d['raw_m']}</div>"""
+    if m_issues: metar_alerts[iata] = "/".join(m_issues)
+    
+    content = f"""<div style="width:400px; color:black; background:white; padding:10px; border-radius:5px;"><b>{iata} STATUS</b><hr><b>Actual XW: {xw} KT</b><br>{d['raw_m']}</div>"""
     markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": content})
 
-# 10. RENDER MAP
-st.markdown(f'<div class="ba-header"><div>OCC HUD v35.1 | CFE & EFW FLEET</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
+# 9. RENDER MAP
+st.markdown(f'<div class="ba-header"><div>OCC HUD v35.2</div><div>{datetime.now().strftime("%H:%M")}Z</div></div>', unsafe_allow_html=True)
 m = folium.Map(location=[50.0, 10.0], zoom_start=5, tiles="CartoDB dark_matter")
 
-# Add Stations
+# Stations
 for mkr in markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=8, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=450)).add_to(m)
 
-# Add Aircraft
-fleet = get_fleet()
-for p in fleet:
-    # Attempt to find IATA from destination ICAO (last 3 chars)
-    dest_iata = p.destination_airport_icao[-3:]
-    dest_wx = weather_data.get(dest_iata, {}).get('raw_m', "No Data in HUD")
-    
-    folium.Marker(
-        location=[p.latitude, p.longitude],
-        icon=folium.Icon(color="red" if p.airline_icao == "EFW" else "blue", icon="plane", prefix="fa"),
-        popup=folium.Popup(f"""<div style="width:250px; color:black;"><b>{p.callsign}</b><br>FL: {int(p.altitude/100)}<br>DEST: {p.destination_airport_icao}<hr><b>ARR WX:</b><br>{dest_wx}</div>""", max_width=300),
-        tooltip=f"{p.callsign} to {p.destination_airport_icao}"
-    ).add_to(m)
+# Fleet tracking logic
+if show_fleet:
+    active_fleet = get_live_fleet()
+    for p in active_fleet:
+        dest = p.destination_airport_icao[-3:] # Get IATA
+        dest_wx = weather_data.get(dest, {}).get('raw_m', "N/A")
+        folium.Marker(
+            location=[p.latitude, p.longitude],
+            icon=folium.Icon(color="red" if p.airline_icao == "EFW" else "blue", icon="plane", prefix="fa"),
+            popup=folium.Popup(f"<div style='color:black;'><b>{p.callsign}</b><br>DEST: {dest}<hr><b>ARR WX:</b><br>{dest_wx}</div>", max_width=250)
+        ).add_to(m)
 
-st_folium(m, width=1200, height=800, key="fleet_weather_map")
+st_folium(m, width=1200, height=800, key="stable_map_v352")
 
-# 11. ALERTS & BRIEF
+# [cite_start]10. ALERTS & BRIEF [cite: 46, 47, 48, 49, 50, 51, 52, 53]
 if metar_alerts:
     st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
     cols = st.columns(5)

@@ -12,47 +12,42 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG (Sidebar explicitly defaults to OPEN)
 st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️", initial_sidebar_state="expanded")
 
-# 2. FULL SCREEN UI CSS (With Ghost Header Fix for Map Clicks)
+# 2. UI CSS ENGINE & 15-MIN REFRESH
 st.markdown('<meta http-equiv="refresh" content="900">', unsafe_allow_html=True)
 
 st.markdown("""
     <style>
-    /* 1. REMOVE ALL STREAMLIT PADDING & MARGINS */
-    .block-container {
-        padding: 0 !important;
-        margin: 0 !important;
+    /* 1. REMOVE ALL PADDING SO MAP TOUCHES THE EDGES */
+    .block-container, [data-testid="stMainBlockContainer"] {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
         max-width: 100% !important;
-        overflow: hidden !important;
     }
     
-    /* 2. GHOST HEADER (Allows clicking map zoom buttons underneath) */
+    /* 2. MAKE HEADER BLEND IN (DO NOT HIDE IT - KEEPS ARROW VISIBLE) */
     header[data-testid="stHeader"] {
-        background: transparent !important;
-        pointer-events: none !important; /* Clicks pass through to the map */
+        background-color: #001a33 !important;
     }
     
-    /* 3. MAKE SIDEBAR TOGGLE CLICKABLE AND VISIBLE */
-    header[data-testid="stHeader"] * {
-        pointer-events: auto !important; /* Re-enables clicks for the toggle arrow */
-    }
-    [data-testid="collapsedControl"] {
-        background-color: #002366 !important;
-        border: 2px solid #d6001a !important;
-        border-radius: 5px !important;
-        margin-top: 15px !important;
-        margin-left: 15px !important;
-    }
-    [data-testid="collapsedControl"] svg {
+    /* 3. STYLE THE SIDEBAR ARROW TO POP OUT */
+    [data-testid="collapsedControl"], button[kind="header"] {
         color: white !important;
+        background-color: #002366 !important;
+        border: 1px solid #d6001a !important;
+        border-radius: 5px !important;
+        margin-top: 10px !important;
+        margin-left: 10px !important;
+    }
+    [data-testid="collapsedControl"] svg, button[kind="header"] svg {
         fill: white !important;
+        color: white !important;
     }
     
-    .stAppToolbar { display: none !important; }
-    
-    /* 4. FORCE MAP TO EXACT VIEWPORT HEIGHT */
+    /* 4. FORCE MAP TO FILL EXACT VIEWPORT HEIGHT */
     iframe[title="streamlit_folium.st_folium"] {
         height: 100vh !important;
-        width: 100vw !important;
     }
     
     /* 5. SIDEBAR STYLING */
@@ -70,7 +65,7 @@ st.markdown("""
     div[data-testid="stSelectbox"] p, div[data-testid="stDateInput"] p { color: #002366 !important; font-weight: 800 !important; }
     
     /* 6. OVERLAYS */
-    .floating-hud { position: absolute; top: 15px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 9999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
+    .floating-hud { position: absolute; top: 65px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 9999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
     
     .reason-box { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 1400px; background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; border-top: 10px solid #d6001a; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
     .reason-box p, .reason-box h3, .reason-box td, .reason-box th, .reason-box b, .reason-box div, .reason-box span { color: #002366 !important; }
@@ -424,8 +419,8 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-# No height limits; css `100vh` strictly locks it to your monitor.
-st_folium(m, use_container_width=True, key="map_stable_v30")
+# Passing 'None' to height with the CSS 100vh override forces perfect full-screen depth
+st_folium(m, width=None, height=1200, use_container_width=True, key="map_stable_v30")
 
 # 12. RENDER STRATEGY BRIEF FLOATING AT THE BOTTOM
 if st.session_state.investigate_iata != "None":

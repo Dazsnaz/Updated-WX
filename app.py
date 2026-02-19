@@ -183,26 +183,40 @@ def process_weather(bundle, airport_dict, horizon_limit, xw_threshold):
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
     for iata, data in bundle.items():
-        if data['status'] == "offline": continue
-        m, t, info = data['m_obj'], data['t_obj'], airport_dict[iata]
+        if data['status'] == "offline" or 'm_obj' not in data: continue
+        m, t, info = data['m_obj'], data.get('t_obj'), airport_dict[iata]
         v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
-        m_vis = m.data.visibility.value if (m.data and m.data.visibility) else 9999
+        
+        m_vis = m.data.visibility.value if (m.data and hasattr(m.data, 'visibility') and m.data.visibility) else 9999
         m_cig = 9999
-        if m.data and m.data.clouds:
+        if m.data and hasattr(m.data, 'clouds') and m.data.clouds:
             for lyr in m.data.clouds:
                 if lyr.type in ['BKN', 'OVC'] and lyr.base: m_cig = min(m_cig, lyr.base * 100)
+        
         w_issues, f_time = [], ""
-        if t and t.data and t.data.forecast:
+        if t and hasattr(t, 'data') and t.data and hasattr(t.data, 'forecast') and t.data.forecast:
             for line in t.data.forecast:
-                if not line.start_time or line.start_time.dt > cutoff_time: continue
+                if not hasattr(line, 'start_time') or not line.start_time or line.start_time.dt > cutoff_time: continue
                 l_raw = line.raw.upper()
                 if re.search(r'(-SN|\+SN|\bSN\b|\bFZ|\bFG\b)', l_raw): w_issues.append("WINTER/FOG")
-                if (line.visibility.value or 9999) < v_lim: w_issues.append("VIS")
-                l_dir = line.wind_direction.value or info['rwy']
-                l_spd = max(line.wind_speed.value or 0, line.wind_gust.value or 0)
+                
+                l_v = line.visibility.value if (hasattr(line, 'visibility') and line.visibility and line.visibility.value is not None) else 9999
+                if l_v < v_lim: w_issues.append("VIS")
+                
+                # SAFE WIND/GUST EXTRACTION
+                l_dir = line.wind_direction.value if (hasattr(line, 'wind_direction') and line.wind_direction and line.wind_direction.value is not None) else info['rwy']
+                l_spd_val = line.wind_speed.value if (hasattr(line, 'wind_speed') and line.wind_speed and line.wind_speed.value is not None) else 0
+                l_gst_val = line.wind_gust.value if (hasattr(line, 'wind_gust') and line.wind_gust and line.wind_gust.value is not None) else 0
+                l_spd = max(l_spd_val, l_gst_val)
+                
                 if calculate_xwind(l_dir, l_spd, info['rwy']) >= xw_threshold: w_issues.append("XWIND")
                 if w_issues: f_time = f"{line.start_time.dt.strftime('%H')}Z"; break
-        processed[iata] = {"vis": m_vis, "cig": m_cig, "w_dir": m.data.wind_direction.value or 0, "w_spd": m.data.wind_speed.value or 0, "w_gst": m.data.wind_gust.value or 0, "raw_m": m.raw or "N/A", "raw_t": t.raw if t else "N/A", "f_issues": list(set(w_issues)), "f_time": f_time}
+        
+        w_dir = m.data.wind_direction.value if (m.data and hasattr(m.data, 'wind_direction') and m.data.wind_direction) else 0
+        w_spd = m.data.wind_speed.value if (m.data and hasattr(m.data, 'wind_speed') and m.data.wind_speed) else 0
+        w_gst = m.data.wind_gust.value if (m.data and hasattr(m.data, 'wind_gust') and m.data.wind_gust) else 0
+        
+        processed[iata] = {"vis": m_vis, "cig": m_cig, "w_dir": w_dir, "w_spd": w_spd, "w_gst": w_gst, "raw_m": m.raw or "N/A", "raw_t": t.raw if t else "N/A", "f_issues": list(set(w_issues)), "f_time": f_time}
     return processed
 
 weather_data = process_weather(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
@@ -267,5 +281,8 @@ def live_radar_map(cf_on, ef_on, scheduler):
 live_radar_map(show_cf, show_ef, sched_dict)
 
 # 10. ALERTS & LOG
-st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
-st.text_area("Log:", value=f"HANDOVER {current_utc_time}Z | SCAN: {time_horizon}", height=150)
+st.markdown('<div class="section-header">🔴 Actual Alerts</div>', unsafe_allow_html=True)
+if metar_alerts:
+    cols = st.columns(5)
+    for i, (iata, d) in enumerate(metar_alerts.items()):
+        with cols[i % 5]: st.button(f"{iata} {d['type']}", key=f"m_{iata}", type=d['hex'])

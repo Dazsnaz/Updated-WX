@@ -9,32 +9,73 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 
-# 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
+# 1. PAGE CONFIG (Wide layout is forced to 100% via CSS)
+st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️")
 
-# 2. HUD STYLING & 15-MINUTE NATIVE BROWSER AUTO-REFRESH (900 SECONDS)
+# 2. FULL SCREEN UI & 15-MIN BROWSER REFRESH
 st.markdown("""
     <meta http-equiv="refresh" content="900">
     <style>
+    /* REMOVE ALL STREAMLIT PADDING FOR EDGE-TO-EDGE MAP */
+    .block-container {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
+        max-width: 100% !important;
+        overflow-x: hidden;
+    }
+    
+    /* HIDE DEFAULT TOP HEADER */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* MAIN BACKGROUNDS */
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    .ba-header { background-color: #002366 !important; color: #ffffff !important; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #d6001a; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.2rem; }
-    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 350px !important; border-right: 3px solid #d6001a; }
+    
+    /* SIDEBAR STYLING */
+    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 380px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
-    [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
+    
+    /* ALERT BUTTON COLORS (Now Full Width in Sidebar) */
+    .stButton > button { width: 100% !important; border: 1px solid white !important; font-weight: bold !important; }
+    .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; }
+    .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; }
+    
+    /* EXPANDERS (Settings & Handover Log) */
+    [data-testid="stExpander"] { background-color: #001a33 !important; border: 1px solid #005a9c !important; border-radius: 8px !important; }
+    [data-testid="stExpander"] summary p { font-weight: bold !important; font-size: 1.1rem !important; color: white !important; }
+    
+    /* DROPDOWNS & INPUTS */
     div[data-testid="stSelectbox"] div[data-baseweb="select"], div[data-testid="stDateInput"] div { background-color: white !important; }
     div[data-testid="stSelectbox"] *, div[data-testid="stDateInput"] * { color: #002366 !important; font-weight: 800 !important; }
-    [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
-    [data-testid="stFileUploader"] section { background-color: #005a9c !important; border: 1px solid white !important; border-radius: 5px !important; padding: 15px !important; }
-    [data-testid="stFileUploader"] section * { color: white !important; font-weight: bold !important; }
-    [data-testid="stFileUploader"] button { background-color: #002366 !important; color: white !important; border: 1px solid white !important; border-radius: 4px !important; }
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
-    .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    
+    /* FLOATING TOP-RIGHT HUD (Over the map) */
+    .floating-hud {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: rgba(0, 35, 102, 0.85);
+        border: 2px solid #d6001a;
+        padding: 10px 25px;
+        border-radius: 8px;
+        color: white;
+        font-weight: bold;
+        z-index: 999999;
+        backdrop-filter: blur(5px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        display: flex;
+        gap: 20px;
+        font-size: 1.1rem;
+        pointer-events: none;
+    }
+
+    /* STRATEGY BRIEF BOX */
+    .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin: 20px auto; max-width: 1400px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box * { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
-    .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -83,7 +124,7 @@ def load_schedule_robust(file_bytes):
     except Exception as e:
         return pd.DataFrame()
 
-# 4. MASTER DATABASE (INCLUDING OFFLINE ALTERNATES)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -132,7 +173,6 @@ base_airports = {
     "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
-    # TACTICAL OFFLINE ALTERNATES (Fetched for Weather, but hidden from schedule map)
     "PSA": {"icao": "LIRP", "lat": 43.683, "lon": 10.392, "rwy": 40, "fleet": "Cityflyer", "spec": False},
     "BLQ": {"icao": "LIPE", "lat": 44.535, "lon": 11.288, "rwy": 120, "fleet": "Cityflyer", "spec": False},
     "PXO": {"icao": "LPPS", "lat": 33.073, "lon": -16.349, "rwy": 180, "fleet": "Euroflyer", "spec": False},
@@ -140,71 +180,67 @@ base_airports = {
 }
 
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
+if "map_center" not in st.session_state: st.session_state.map_center = [50.0, 10.0]
+if "map_zoom" not in st.session_state: st.session_state.map_zoom = 4
 SCHEDULE_FILE = "active_schedule.csv"
 
-# 5. SIDEBAR WITH GLOBAL CSV LOADER & MANUAL REFRESH
+# 5. SIDEBAR DEFINITION (Top to Bottom rendering trick)
 with st.sidebar:
-    st.title("🛠️ COMMAND HUD")
+    st.markdown("<h2 style='text-align: center; color: white;'>✈️ COMMAND HUD</h2>", unsafe_allow_html=True)
     
-    st.markdown("📂 **SCHEDULE INTEGRATION**")
-    uploaded_file = st.file_uploader("Upload Daily CSV to Set Global Schedule", type=["csv"])
+    # Placeholder for Alerts so they render at the TOP of the sidebar after weather is fetched!
+    alerts_container = st.container()
     
-    if uploaded_file is not None:
-        with open(SCHEDULE_FILE, "wb") as f:
-            f.write(uploaded_file.getvalue())
-        st.success("✅ Master Schedule Updated for all users!")
+    st.markdown("---")
     
-    flight_schedule = pd.DataFrame()
-    selected_date = st.date_input("📅 Select Operations Date:", value=datetime.now().date())
-    active_stations = set()
-    
-    if os.path.exists(SCHEDULE_FILE):
-        with open(SCHEDULE_FILE, "rb") as f:
-            saved_bytes = f.read()
+    # TUCKED AWAY SETTINGS & SCHEDULE
+    with st.expander("⚙️ SCHEDULE & SETTINGS", expanded=False):
+        uploaded_file = st.file_uploader("Upload CSV Schedule", type=["csv"])
+        if uploaded_file is not None:
+            with open(SCHEDULE_FILE, "wb") as f:
+                f.write(uploaded_file.getvalue())
+            st.success("✅ Global Schedule Updated!")
         
-        flight_schedule = load_schedule_robust(saved_bytes)
-        if not flight_schedule.empty and 'DATE_OBJ' in flight_schedule.columns:
-            flight_schedule = flight_schedule[flight_schedule['DATE_OBJ'] == selected_date]
-            if not flight_schedule.empty:
-                st.info(f"Using Global Schedule: {len(flight_schedule)} flights active for {selected_date.strftime('%d %b %Y')}")
-                active_stations = set(flight_schedule['DEP'].dropna()) | set(flight_schedule['ARR'].dropna())
-            else:
-                st.warning(f"No flights found for {selected_date.strftime('%d %b %Y')}. Displaying full network.")
-    else:
-        st.warning("No global schedule found. Upload a CSV above to map active stations.")
-
-    if not flight_schedule.empty and active_stations:
-        display_airports = {k: v for k, v in base_airports.items() if k in active_stations}
-    else:
-        display_airports = {k: v for k, v in base_airports.items() if k not in ["PSA", "BLQ", "PXO", "MUC"]}
+        selected_date = st.date_input("📅 Operations Date:", value=datetime.now().date())
         
-    st.markdown("---")
-    if st.button("🔄 MANUAL DATA REFRESH"):
-        st.cache_data.clear()
-        st.rerun()
+        if st.button("🔄 MANUAL DATA REFRESH", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
-    st.markdown("---")
-    st.markdown("🕒 **INTEL HORIZON**")
-    time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
-    horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
-    
-    st.markdown("---")
-    st.markdown("⚠️ **SAFETY LIMITS**")
-    xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
-    
-    st.markdown("---")
-    st.markdown("🎯 **TACTICAL FILTERS**")
-    filter_map = {"XWIND": "XWIND", "WINDY (Gusts >25)": "WINDY", "FOG": "FOG", "WINTER (Snow/FZRA)": "WINTER", "TSRA": "TSRA", "VIS (<Limits)": "VIS", "LOW CLOUD (<Limits)": "CLOUD", "FLR TAILWIND (>10kt)": "TAILWIND(>10kt)"}
-    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)", "FLR TAILWIND (>10kt)"])
-    
-    st.markdown("---")
-    show_cf = st.checkbox("Cityflyer (CFE)", value=True)
-    show_ef = st.checkbox("Euroflyer (EFW)", value=True)
-    
-    st.markdown("---")
-    map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
+    # TUCKED AWAY FILTERS
+    with st.expander("🎯 TACTICAL FILTERS", expanded=False):
+        time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
+        horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
+        xw_limit = st.slider("X-WIND LIMIT (KT)", 15, 35, 25)
+        
+        filter_map = {"XWIND": "XWIND", "WINDY (Gusts >25)": "WINDY", "FOG": "FOG", "WINTER": "WINTER", "TSRA": "TSRA", "VIS (<Limits)": "VIS", "LOW CLOUD": "CLOUD", "FLR TAILWIND": "TAILWIND(>10kt)"}
+        hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER", "TSRA", "VIS (<Limits)", "LOW CLOUD", "FLR TAILWIND"])
+        
+        show_cf = st.checkbox("Cityflyer (CFE)", value=True)
+        show_ef = st.checkbox("Euroflyer (EFW)", value=True)
+        map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 6. DATA FETCH & PROCESSING (30-Min TTL)
+    # TUCKED AWAY HANDOVER LOG
+    log_container = st.container()
+
+# 6. SCHEDULE PARSING
+flight_schedule = pd.DataFrame()
+active_stations = set()
+
+if os.path.exists(SCHEDULE_FILE):
+    with open(SCHEDULE_FILE, "rb") as f: saved_bytes = f.read()
+    flight_schedule = load_schedule_robust(saved_bytes)
+    if not flight_schedule.empty and 'DATE_OBJ' in flight_schedule.columns:
+        flight_schedule = flight_schedule[flight_schedule['DATE_OBJ'] == selected_date]
+        if not flight_schedule.empty:
+            active_stations = set(flight_schedule['DEP'].dropna()) | set(flight_schedule['ARR'].dropna())
+
+if not flight_schedule.empty and active_stations:
+    display_airports = {k: v for k, v in base_airports.items() if k in active_stations}
+else:
+    display_airports = {k: v for k, v in base_airports.items() if k not in ["PSA", "BLQ", "PXO", "MUC"]}
+
+# 7. WEATHER ENGINE
 @st.cache_data(ttl=900)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -278,8 +314,9 @@ weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, ho
 
 current_utc_date = datetime.now(timezone.utc).date()
 current_utc_time_str = datetime.now(timezone.utc).strftime('%H%M')
+display_time = datetime.now(timezone.utc).strftime("%H:%M")
 
-# 7. MAP MARKERS & SCHEDULE INJECTION
+# 8. MAP MARKERS & SCHEDULE INJECTION
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in display_airports.items():
     data = weather_data.get(iata)
@@ -348,41 +385,56 @@ for iata, info in display_airports.items():
                 rows += f"<tr style='border-bottom: 1px solid #ddd;'><td style='color:{f_color}; font-weight:bold; padding:4px;'>{f_status}</td><td style='padding:4px;'>{flt}</td><td style='padding:4px;'>{dep}</td><td style='padding:4px;'>{arr}</td><td style='padding:4px;'>{sta_raw}</td></tr>"
                 
             if rows:
-                inbound_html = f"""
-                <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
-                    <b style='color:#002366; font-size:14px;'>🛬 YET TO ARRIVE ({selected_date.strftime('%d/%m/%Y')})</b>
-                    <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
-                        <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'>
-                            <tr style='background:#002366; color:#fff;'><th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th></tr>
-                            {rows}
-                        </table></div></div>"""
+                inbound_html = f"""<div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'><b style='color:#002366; font-size:14px;'>🛬 YET TO ARRIVE ({selected_date.strftime('%d/%m/%Y')})</b><div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'><table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'><tr style='background:#002366; color:#fff;'><th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th></tr>{rows}</table></div></div>"""
     
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div>{inbound_html}</div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
-# 8. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.5 (Auto-Refresh 15m)</div><div>Live Time: {datetime.now(timezone.utc).strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
-m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
+# 9. INJECT ALERTS INTO THE SIDEBAR TOP PLACEHOLDER
+with alerts_container:
+    if not metar_alerts and not taf_alerts:
+        st.success("✅ Network Stable - No Active Hazards")
+    
+    if metar_alerts:
+        st.markdown("<p style='color:white; margin-bottom: 5px;'>🔴 <b>ACTUAL HAZARDS (NOW)</b></p>", unsafe_allow_html=True)
+        for iata, d in metar_alerts.items():
+            if st.button(f"{iata} | {d['type']}", key=f"m_{iata}", type=d['hex'], use_container_width=True): 
+                st.session_state.investigate_iata = iata
+                
+    if taf_alerts:
+        st.markdown(f"<p style='color:white; margin-top: 15px; margin-bottom: 5px;'>🟠 <b>FORECAST HAZARDS ({time_horizon})</b></p>", unsafe_allow_html=True)
+        for iata, d in taf_alerts.items():
+            if st.button(f"{iata} | {d['time']} {d['type']}", key=f"f_{iata}", type="secondary", use_container_width=True): 
+                st.session_state.investigate_iata = iata
+
+
+# 10. INJECT HANDOVER LOG INTO BOTTOM EXPANDER
+h_txt = f"HANDOVER {display_time}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
+for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
+with log_container:
+    with st.expander("📝 SHIFT HANDOVER LOG", expanded=False):
+        st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log", label_visibility="collapsed")
+
+
+# 11. RENDER FULL SCREEN MAP & FLOATING HUD
+st.markdown(f'''
+    <div class="floating-hud">
+        <div>📡 v30.0 Command Edition</div>
+        <div>|</div>
+        <div style="color: #eb8f34;">{display_time} Z</div>
+    </div>
+''', unsafe_allow_html=True)
+
+m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state.map_zoom, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
-st_folium(m, width=1200, height=800, key="map_stable_v295")
 
-# 9. ALERTS & STRATEGY
-st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
-if metar_alerts:
-    cols = st.columns(5)
-    for i, (iata, d) in enumerate(metar_alerts.items()):
-        with cols[i % 5]:
-            if st.button(f"{iata} NOW {d['type']}", key=f"m_{iata}", type=d['hex']): st.session_state.investigate_iata = iata
-            
-st.markdown(f'<div class="section-header">🟠 Forecast Alerts ({time_horizon})</div>', unsafe_allow_html=True)
-if taf_alerts:
-    cols_f = st.columns(5)
-    for i, (iata, d) in enumerate(taf_alerts.items()):
-        with cols_f[i % 5]:
-            if st.button(f"{iata} {d['time']} {d['type']}", key=f"f_{iata}", type="secondary"): st.session_state.investigate_iata = iata
+# The map width is fluid, height is set to 850 pixels to fill modern screens nicely.
+st_folium(m, width=None, height=850, use_container_width=True, key="map_stable_v30")
 
+
+# 12. RENDER STRATEGY BRIEF UNDER THE MAP
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -411,13 +463,8 @@ if st.session_state.investigate_iata != "None":
     
     st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{cur_xw}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Live X-Wind</th><th>Status</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>STABLE</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
     
-    if st.button("Close Strategy Brief"): 
-        st.session_state.investigate_iata = "None"
-        st.rerun()
-
-# 10. HANDOVER LOG
-st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
-live_time = datetime.now(timezone.utc).strftime('%H:%M')
-h_txt = f"HANDOVER {live_time}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
-for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log")
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        if st.button("Close Strategy Brief", use_container_width=True): 
+            st.session_state.investigate_iata = "None"
+            st.rerun()

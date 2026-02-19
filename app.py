@@ -207,8 +207,9 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
     for iata, data in bundle.items():
         if data['status'] == "offline" or "m_obj" not in data:
-            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "f_wind_spd":0, "f_wind_dir":0, "w_spd":0, "w_dir":0}
+            processed[iata] = {"status": "offline", "raw_m": "N/A", "raw_t": "N/A", "f_issues": [], "f_wind_spd":0, "f_wind_dir":0, "w_spd":0, "w_dir":0, "f_time": ""}
             continue
+        
         m, t, info = data['m_obj'], data.get('t_obj'), airport_dict[iata]
         v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
         
@@ -218,7 +219,10 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
             for lyr in m.data.clouds:
                 if lyr.type in ['BKN', 'OVC'] and lyr.base: m_cig = min(m_cig, lyr.base * 100)
         
-        w_issues, f_wind_spd, f_wind_dir, w_time, w_prob = [], 0, 0, "", False
+        # PRE-INITIALIZE VARIABLES TO PREVENT UNBOUND LOCAL ERROR
+        w_issues = []
+        f_time = ""
+        
         if t and hasattr(t, 'data') and t.data and hasattr(t.data, 'forecast') and t.data.forecast:
             for line in t.data.forecast:
                 if not hasattr(line, 'start_time') or not line.start_time or line.start_time.dt > cutoff_time: continue
@@ -236,13 +240,20 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                 if calculate_xwind(l_dir, l_spd, info['rwy']) >= xw_threshold: w_issues.append("XWIND")
                 elif l_spd > 25: w_issues.append("WINDY")
                 
-                if w_issues: f_time = f"{line.start_time.dt.strftime('%H')}Z"; break
+                if w_issues and not f_time: 
+                    f_time = f"{line.start_time.dt.strftime('%H')}Z"
+                    break
         
         w_dir = m.data.wind_direction.value if (m.data and hasattr(m.data, 'wind_direction') and m.data.wind_direction) else 0
         w_spd = m.data.wind_speed.value if (m.data and hasattr(m.data, 'wind_speed') and m.data.wind_speed) else 0
         w_gst = m.data.wind_gust.value if (m.data and hasattr(m.data, 'wind_gust') and m.data.wind_gust) else 0
         
-        processed[iata] = {"vis": m_vis, "cig": m_cig, "status": "online", "w_dir": w_dir, "w_spd": w_spd, "w_gst": w_gst, "raw_m": m.raw or "N/A", "raw_t": t.raw if t else "N/A", "f_issues": list(set(w_issues)), "f_time": f_time}
+        processed[iata] = {
+            "vis": m_vis, "cig": m_cig, "status": "online", 
+            "w_dir": w_dir, "w_spd": w_spd, "w_gst": w_gst, 
+            "raw_m": m.raw or "N/A", "raw_t": t.raw if t else "N/A", 
+            "f_issues": list(set(w_issues)), "f_time": f_time
+        }
     return processed
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
@@ -327,7 +338,7 @@ for iata, info in display_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 8. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Dynamic Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Strategic Build)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:

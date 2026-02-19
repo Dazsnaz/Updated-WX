@@ -74,18 +74,15 @@ def load_schedule_robust(file_bytes):
                 break
         df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')), skiprows=skip_r, on_bad_lines='skip')
         df = df.dropna(subset=['FLT'])
-        
-        # Strip invisible spaces from the station codes to guarantee matching
         if 'DEP' in df.columns: df['DEP'] = df['DEP'].astype(str).str.strip().str.upper()
         if 'ARR' in df.columns: df['ARR'] = df['ARR'].astype(str).str.strip().str.upper()
-            
         df['DATE_OBJ'] = pd.to_datetime(df['DATE'], format='%d/%m/%y', errors='coerce').dt.date
         df['DATE_OBJ'] = df['DATE_OBJ'].fillna(pd.to_datetime(df['DATE'], dayfirst=True, errors='coerce').dt.date)
         return df
     except Exception as e:
         return pd.DataFrame()
 
-# 4. MASTER DATABASE (FULL 47 STATIONS)
+# 4. MASTER DATABASE (INCLUDING OFFLINE ALTERNATES)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -134,11 +131,14 @@ base_airports = {
     "IVL": {"icao": "EFIV", "lat": 68.607, "lon": 27.405, "rwy": 40, "fleet": "Euroflyer", "spec": False},
     "MLA": {"icao": "LMML", "lat": 35.857, "lon": 14.477, "rwy": 310, "fleet": "Euroflyer", "spec": False},
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
+    # TACTICAL OFFLINE ALTERNATES (Fetched for Weather, but hidden from schedule map)
+    "PSA": {"icao": "LIRP", "lat": 43.683, "lon": 10.392, "rwy": 40, "fleet": "Cityflyer", "spec": False},
+    "BLQ": {"icao": "LIPE", "lat": 44.535, "lon": 11.288, "rwy": 120, "fleet": "Cityflyer", "spec": False},
+    "PXO": {"icao": "LPPS", "lat": 33.073, "lon": -16.349, "rwy": 180, "fleet": "Euroflyer", "spec": False},
+    "MUC": {"icao": "EDDM", "lat": 48.353, "lon": 11.786, "rwy": 80, "fleet": "Euroflyer", "spec": False},
 }
 
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
-
-# Define the Global Save Path for the CSV
 SCHEDULE_FILE = "active_schedule.csv"
 
 # 5. SIDEBAR WITH GLOBAL CSV LOADER
@@ -148,7 +148,6 @@ with st.sidebar:
     st.markdown("📂 **SCHEDULE INTEGRATION**")
     uploaded_file = st.file_uploader("Upload Daily CSV to Set Global Schedule", type=["csv"])
     
-    # If a new file is uploaded, overwrite the global server file
     if uploaded_file is not None:
         with open(SCHEDULE_FILE, "wb") as f:
             f.write(uploaded_file.getvalue())
@@ -158,13 +157,11 @@ with st.sidebar:
     selected_date = st.date_input("📅 Select Operations Date:", value=datetime.now().date())
     active_stations = set()
     
-    # Always attempt to load the global server file
     if os.path.exists(SCHEDULE_FILE):
         with open(SCHEDULE_FILE, "rb") as f:
             saved_bytes = f.read()
         
         flight_schedule = load_schedule_robust(saved_bytes)
-        
         if not flight_schedule.empty and 'DATE_OBJ' in flight_schedule.columns:
             flight_schedule = flight_schedule[flight_schedule['DATE_OBJ'] == selected_date]
             if not flight_schedule.empty:
@@ -175,11 +172,11 @@ with st.sidebar:
     else:
         st.warning("No global schedule found. Upload a CSV above to map active stations.")
 
-    # DYNAMIC STATION FILTERING
     if not flight_schedule.empty and active_stations:
         display_airports = {k: v for k, v in base_airports.items() if k in active_stations}
     else:
-        display_airports = base_airports
+        # If no schedule, display base network (hide offline alts)
+        display_airports = {k: v for k, v in base_airports.items() if k not in ["PSA", "BLQ", "PXO", "MUC"]}
         
     st.markdown("---")
     if st.button("🔄 MANUAL DATA REFRESH"):
@@ -197,8 +194,8 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
-    filter_map = {"XWIND": "XWIND", "WINDY (Gusts >25)": "WINDY", "FOG": "FOG", "WINTER (Snow/FZRA)": "WINTER", "TSRA": "TSRA", "VIS (<Limits)": "VIS", "LOW CLOUD (<Limits)": "CLOUD"}
-    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
+    filter_map = {"XWIND": "XWIND", "WINDY (Gusts >25)": "WINDY", "FOG": "FOG", "WINTER (Snow/FZRA)": "WINTER", "TSRA": "TSRA", "VIS (<Limits)": "VIS", "LOW CLOUD (<Limits)": "CLOUD", "FLR TAILWIND (>10kt)": "TAILWIND(>10kt)"}
+    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)", "FLR TAILWIND (>10kt)"])
     
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
@@ -207,7 +204,8 @@ with st.sidebar:
     st.markdown("---")
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 6. DATA FETCH & PROCESSING (30-Min TTL)
+# 6. DATA FETCH & PROCESSING
+# We fetch weather for ALL base_airports (including offline alts) so the Strategy Brief has their data ready.
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -218,7 +216,7 @@ def get_raw_weather_master(airport_dict):
         except: raw_res[iata] = {"status": "offline"}
     return raw_res
 
-raw_weather_bundle = get_raw_weather_master(display_airports)
+raw_weather_bundle = get_raw_weather_master(base_airports)
 
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshold):
     processed = {}
@@ -257,6 +255,11 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                 if calculate_xwind(l_dir, l_spd, info['rwy']) >= xw_threshold: w_issues.append("XWIND")
                 elif l_spd > 25: w_issues.append("WINDY")
                 
+                # FLR TAILWIND LOGIC (FORECAST)
+                if iata == "FLR":
+                    tw_comp = abs(l_spd * math.cos(math.radians(l_dir - 50)))
+                    if tw_comp >= 10: w_issues.append("TAILWIND(>10kt)")
+                
                 if w_issues and not f_time: 
                     f_time = f"{line.start_time.dt.strftime('%H')}Z"
                     break
@@ -273,7 +276,7 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
         }
     return processed
 
-weather_data = process_weather_for_horizon(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
+weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours, xw_limit)
 
 current_utc_date = datetime.now(timezone.utc).date()
 current_utc_time_str = datetime.now(timezone.utc).strftime('%H%M')
@@ -297,12 +300,17 @@ for iata, info in display_airports.items():
     if cur_xw >= xw_limit: m_issues.append("XWIND")
     if data.get('w_gst', 0) > 25 and "XWIND" not in m_issues: m_issues.append("WINDY")
     
+    # FLR TAILWIND LOGIC (METAR)
+    if iata == "FLR":
+        tw_comp = abs(max(data.get('w_spd', 0), data.get('w_gst', 0)) * math.cos(math.radians(data.get('w_dir', 0) - 50)))
+        if tw_comp >= 10: m_issues.append("TAILWIND(>10kt)")
+    
     trend_icon = "➡️"
     if not m_issues and data['f_issues']: trend_icon = "📈"
     elif m_issues and not data['f_issues']: trend_icon = "📉"
     
     color = "#008000"
-    if m_issues: color = "#d6001a" if any(x in m_issues for x in ["FOG","WINTER","VIS","TSRA","XWIND"]) else "#eb8f34"
+    if m_issues: color = "#d6001a" if any(x in m_issues for x in ["FOG","WINTER","VIS","TSRA","XWIND","TAILWIND(>10kt)"]) else "#eb8f34"
     elif data['f_issues']: color = "#eb8f34"
     if not m_issues and not data['f_issues']: green_stations.append(iata)
     
@@ -319,7 +327,7 @@ for iata, info in display_airports.items():
     
     inbound_html = ""
     if not flight_schedule.empty:
-        arr_flights = flight_schedule[flight_schedule['ARR'] == iata]
+        arr_flights = flight_schedule[flight_schedule['ARR'] == iata].sort_values(by='STA')
         if not arr_flights.empty:
             rows = ""
             for _, row in arr_flights.iterrows():
@@ -327,7 +335,6 @@ for iata, info in display_airports.items():
                 sta_clean = sta_raw.replace(':', '') 
                 flight_date = row['DATE_OBJ']
                 
-                # Check if flight has already arrived
                 if flight_date < current_utc_date: continue
                 if flight_date == current_utc_date and sta_clean < current_utc_time_str: continue
                 
@@ -385,17 +392,29 @@ if st.session_state.investigate_iata != "None":
     issue_desc = (taf_alerts.get(iata, {}) or metar_alerts.get(iata, {}) or {}).get('type', "STABLE")
     cur_xw = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     
+    # Priority Alternates Logic
+    preferred_alts = []
+    if iata == "FLR": preferred_alts = ["PSA", "BLQ"]
+    elif iata == "FNC": preferred_alts = ["PXO"]
+    elif iata == "INN": preferred_alts = ["MUC"]
+    
     alt_list = []
-    for g in [a for a in base_airports.keys() if a not in metar_alerts and a not in taf_alerts]:
-        if g != iata and g in base_airports:
+    for g in base_airports.keys():
+        if g != iata and g not in metar_alerts and g not in taf_alerts:
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
-            score = (dist * 0.6)
-            alt_list.append({"iata": g, "dist": dist, "xw": "CHK", "score": score})
+            alt_wx = weather_data.get(g, {})
+            alt_xw = calculate_xwind(alt_wx.get('w_dir', 0), max(alt_wx.get('w_spd', 0), alt_wx.get('w_gst', 0)), base_airports[g]['rwy'])
+            
+            score = dist
+            if g in preferred_alts: score -= 1000 # Forces preferred offline alternates to the top
+            
+            alt_list.append({"iata": g, "dist": dist, "xw": alt_xw, "score": score})
+            
     alt_list = sorted(alt_list, key=lambda x: x['score'])[:3]
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")
     
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{cur_xw}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Horizon XW</th><th>Probability</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>{'HIGH' if a['score'] < 150 else 'STABLE'}</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{cur_xw}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Live X-Wind</th><th>Status</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>STABLE</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
     
     if st.button("Close Strategy Brief"): 
         st.session_state.investigate_iata = "None"

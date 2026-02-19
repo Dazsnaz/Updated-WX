@@ -323,11 +323,9 @@ if show_radar:
     if not flight_schedule.empty:
         has_arcid = 'ARCID' in flight_schedule.columns
         for _, r in flight_schedule.iterrows():
-            # Only exact mapping works perfectly (requires ARCID in CSV)
             if has_arcid and pd.notna(r['ARCID']) and str(r['ARCID']).strip():
                 sched_dict[str(r['ARCID']).strip().upper()] = r
             
-            # Fallback basic map just in case the ATC callsign exactly matches the FLT number (e.g. CFE8721)
             if pd.notna(r['FLT']):
                 flt_str = str(r['FLT']).replace('BA', '').strip()
                 sched_dict[f"CFE{flt_str}"] = r
@@ -347,6 +345,10 @@ if show_radar:
         p['dep'] = dep
         p['arr'] = arr
         radar_data.append(p)
+
+# TIME LOGIC FOR SCHEDULE FILTERING
+current_utc_date = datetime.now(timezone.utc).date()
+current_utc_time_str = datetime.now(timezone.utc).strftime('%H:%M')
 
 # 7. UI LOOP & INBOUND FLIGHT INJECTION
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
@@ -387,17 +389,27 @@ for iata, info in display_airports.items():
     
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    # SCHEDULE INJECTION HTML
+    # ---------------------------------------------------------
+    # CSV FLIGHT INJECTION LOGIC (Filters out past flights)
+    # ---------------------------------------------------------
     inbound_html = ""
     if not flight_schedule.empty:
         arr_flights = flight_schedule[flight_schedule['ARR'] == iata].sort_values(by='STA')
         if not arr_flights.empty:
             rows = ""
             for _, row in arr_flights.iterrows():
+                sta = str(row['STA']).strip()
+                flight_date = row['DATE_OBJ']
+                
+                # Filter out flights that have already arrived (if looking at today)
+                if flight_date < current_utc_date:
+                    continue
+                if flight_date == current_utc_date and sta < current_utc_time_str:
+                    continue
+                
                 flt = str(row['FLT']).strip()
                 dep = str(row['DEP']).strip()
                 arr = str(row['ARR']).strip()
-                sta = str(row['STA']).strip()
                 canc = row.get('Cancellation Reason', None)
                 
                 f_status = "SCHED"
@@ -413,20 +425,21 @@ for iata, info in display_airports.items():
                     f_color = "#eb8f34"
                     
                 rows += f"<tr style='border-bottom: 1px solid #ddd;'><td style='color:{f_color}; font-weight:bold; padding:4px;'>{f_status}</td><td style='padding:4px;'>{flt}</td><td style='padding:4px;'>{dep}</td><td style='padding:4px;'>{arr}</td><td style='padding:4px;'>{sta}</td></tr>"
-                
-            inbound_html = f"""
-            <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
-                <b style='color:#002366; font-size:14px;'>🛬 INBOUND SCHEDULE ({selected_date.strftime('%d/%m/%Y')})</b>
-                <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
-                    <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'>
-                        <tr style='background:#002366; color:#fff;'>
-                            <th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th>
-                        </tr>
-                        {rows}
-                    </table>
+            
+            if rows: # Only show the table if there are actually future flights left
+                inbound_html = f"""
+                <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
+                    <b style='color:#002366; font-size:14px;'>🛬 YET TO ARRIVE ({selected_date.strftime('%d/%m/%Y')})</b>
+                    <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
+                        <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'>
+                            <tr style='background:#002366; color:#fff;'>
+                                <th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th>
+                            </tr>
+                            {rows}
+                        </table>
+                    </div>
                 </div>
-            </div>
-            """
+                """
     
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div>{inbound_html}</div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})

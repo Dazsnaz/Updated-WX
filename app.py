@@ -12,11 +12,10 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG (Wide layout is forced to 100% via CSS)
 st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️")
 
-# 2. FULL SCREEN UI & 15-MIN BROWSER REFRESH
+# 2. FULL SCREEN UI & 15-MIN BROWSER REFRESH (Asterisks removed to prevent markdown leaks)
 st.markdown("""
     <meta http-equiv="refresh" content="900">
     <style>
-    /* REMOVE ALL STREAMLIT PADDING FOR EDGE-TO-EDGE MAP */
     .block-container {
         padding-top: 0rem !important;
         padding-bottom: 0rem !important;
@@ -26,33 +25,27 @@ st.markdown("""
         overflow-x: hidden;
     }
     
-    /* HIDE DEFAULT TOP HEADER */
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
-    /* MAIN BACKGROUNDS */
     .main { background-color: #001a33 !important; }
-    html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
+    html, body, [class^="st-"], div, p, h1, h2, h4, label { color: white !important; }
     
-    /* SIDEBAR STYLING */
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 380px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
     
-    /* ALERT BUTTON COLORS (Now Full Width in Sidebar) */
     .stButton > button { width: 100% !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; }
     
-    /* EXPANDERS (Settings & Handover Log) */
     [data-testid="stExpander"] { background-color: #001a33 !important; border: 1px solid #005a9c !important; border-radius: 8px !important; }
     [data-testid="stExpander"] summary p { font-weight: bold !important; font-size: 1.1rem !important; color: white !important; }
     
-    /* DROPDOWNS & INPUTS */
     div[data-testid="stSelectbox"] div[data-baseweb="select"], div[data-testid="stDateInput"] div { background-color: white !important; }
-    div[data-testid="stSelectbox"] *, div[data-testid="stDateInput"] * { color: #002366 !important; font-weight: 800 !important; }
+    div[data-testid="stSelectbox"] p, div[data-testid="stDateInput"] p { color: #002366 !important; font-weight: 800 !important; }
+    div[data-testid="stSelectbox"] span, div[data-testid="stDateInput"] span { color: #002366 !important; font-weight: 800 !important; }
     
-    /* FLOATING TOP-RIGHT HUD (Over the map) */
     .floating-hud {
         position: fixed;
         top: 20px;
@@ -72,9 +65,8 @@ st.markdown("""
         pointer-events: none;
     }
 
-    /* STRATEGY BRIEF BOX */
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin: 20px auto; max-width: 1400px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-    .reason-box * { color: #002366 !important; }
+    .reason-box p, .reason-box h3, .reason-box td, .reason-box th, .reason-box b, .reason-box div { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
@@ -181,14 +173,14 @@ base_airports = {
 
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 if "map_center" not in st.session_state: st.session_state.map_center = [50.0, 10.0]
-if "map_zoom" not in st.session_state: st.session_state.map_zoom = 4
+if "map_zoom" not in st.session_state: st.session_state.map_zoom = 5
 SCHEDULE_FILE = "active_schedule.csv"
 
-# 5. SIDEBAR DEFINITION (Top to Bottom rendering trick)
+# 5. SIDEBAR DEFINITION (Top to Bottom rendering)
 with st.sidebar:
     st.markdown("<h2 style='text-align: center; color: white;'>✈️ COMMAND HUD</h2>", unsafe_allow_html=True)
     
-    # Placeholder for Alerts so they render at the TOP of the sidebar after weather is fetched!
+    # Placeholder for Alerts so they render at the TOP of the sidebar after weather is fetched
     alerts_container = st.container()
     
     st.markdown("---")
@@ -420,7 +412,7 @@ with log_container:
 # 11. RENDER FULL SCREEN MAP & FLOATING HUD
 st.markdown(f'''
     <div class="floating-hud">
-        <div>📡 v30.0 Command Edition</div>
+        <div>📡 v30.1 Command Edition</div>
         <div>|</div>
         <div style="color: #eb8f34;">{display_time} Z</div>
     </div>
@@ -430,8 +422,8 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-# The map width is fluid, height is set to 850 pixels to fill modern screens nicely.
-st_folium(m, width=None, height=850, use_container_width=True, key="map_stable_v30")
+# The map width is fluid, height is set to fill modern screens nicely.
+st_folium(m, width=None, height=900, use_container_width=True, key="map_stable_v30")
 
 
 # 12. RENDER STRATEGY BRIEF UNDER THE MAP

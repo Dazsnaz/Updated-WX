@@ -4,6 +4,8 @@ from streamlit_folium import st_folium
 from avwx import Metar, Taf
 import math
 import re
+import io
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 # 1. PAGE CONFIG
@@ -14,44 +16,29 @@ st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
-    
     .ba-header { 
         background-color: #002366 !important; color: #ffffff !important; 
         padding: 20px; border-radius: 8px; margin-bottom: 20px; 
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
-
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
-    
-    /* SIDEBAR BUTTON COLORS RESTORED */
     [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-    
-    /* ALERT BUTTON COLORS RESTORED */
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
-
-    /* DROPDOWN & SELECTBOX (NAVY-ON-WHITE) */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
-
-    /* HANDOVER LOG */
-    [data-testid="stTextArea"] textarea { 
-        color: #002366 !important; background-color: #ffffff !important; 
-        font-weight: bold !important; font-family: 'Courier New', monospace !important; 
-    }
-
+    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box * { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
-    
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. UTILITIES
+# 3. UTILITIES & ROBUST CSV LOADER
 def calculate_dist(lat1, lon1, lat2, lon2):
     R = 3440.065 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -75,6 +62,20 @@ def bold_hazard(text):
     text = re.sub(r'\b((?:BKN|OVC)01[0-5])\b', r'<b>\1</b>', text)
     text = re.sub(r'\b(0[0-9]{3})\b', r'<b>\1</b>', text)
     return text
+
+@st.cache_data
+def load_schedule_robust(file_bytes):
+    try:
+        content = file_bytes.decode('utf-8').splitlines()
+        skip_r = 0
+        for i, line in enumerate(content):
+            if 'DATE' in line and 'FLT' in line and 'DEP' in line and 'ARR' in line:
+                skip_r = i
+                break
+        df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')), skiprows=skip_r, on_bad_lines='skip')
+        return df.dropna(subset=['FLT'])
+    except Exception as e:
+        return pd.DataFrame()
 
 # 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
@@ -127,12 +128,33 @@ base_airports = {
     "ALG": {"icao": "DAAG", "lat": 36.691, "lon": 3.215, "rwy": 230, "fleet": "Euroflyer", "spec": False},
 }
 
-# 5. SESSION STATE
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 6. SIDEBAR
+# 5. SIDEBAR WITH UPLOADER
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
+    
+    st.markdown("📂 **SCHEDULE INTEGRATION**")
+    uploaded_file = st.file_uploader("Upload Daily Flight Schedule (CSV)", type=["csv"])
+    
+    flight_schedule = pd.DataFrame()
+    selected_date = None
+    
+    if uploaded_file is not None:
+        flight_schedule = load_schedule_robust(uploaded_file.getvalue())
+        if not flight_schedule.empty and 'DATE' in flight_schedule.columns:
+            dates = flight_schedule['DATE'].dropna().unique().tolist()
+            if dates:
+                selected_date = st.selectbox("Select Operations Date:", dates)
+                flight_schedule = flight_schedule[flight_schedule['DATE'] == selected_date]
+                st.success(f"Loaded {len(flight_schedule)} flights for {selected_date}")
+        else:
+            st.error("Error reading file. Ensure it's the correct BA CSV export.")
+    else:
+        st.info("Upload your shift's CSV schedule to see affected flights inside station popups.")
+        
+    st.markdown("---")
+    
     if st.button("🔄 MANUAL DATA REFRESH"):
         st.cache_data.clear()
         st.rerun()
@@ -148,11 +170,8 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
-    hazard_filter = st.selectbox("ISOLATE HAZARD", [
-        "Show All Network", "Any Amber/Red Alert", "XWIND", 
-        "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", 
-        "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"
-    ])
+    filter_map = {"XWIND": "XWIND", "WINDY (Gusts >25)": "WINDY", "FOG": "FOG", "WINTER (Snow/FZRA)": "WINTER", "TSRA": "TSRA", "VIS (<Limits)": "VIS", "LOW CLOUD (<Limits)": "CLOUD"}
+    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
     
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
@@ -161,7 +180,7 @@ with st.sidebar:
     st.markdown("---")
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. DATA FETCH
+# 6. DATA FETCH & PROCESSING
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -174,7 +193,6 @@ def get_raw_weather_master(airport_dict):
 
 raw_weather_bundle = get_raw_weather_master(base_airports)
 
-# 8. PROCESSOR
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshold):
     processed = {}
     cutoff_time = datetime.now(timezone.utc) + timedelta(hours=horizon_limit)
@@ -205,10 +223,7 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                         if lyr.type in ['BKN', 'OVC'] and lyr.base: l_c = min(l_c, lyr.base * 100)
                 
                 if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
-                
-                # FIXED: Added support for -SN and +SN
                 if re.search(r'(-SN|\+SN|\bSN\b|\bFZ)', l_raw): l_issues.append("WINTER")
-                
                 if l_v < v_lim: l_issues.append("VIS")
                 if l_c < c_lim: l_issues.append("CLOUD")
                 if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
@@ -239,18 +254,7 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours, xw_limit)
 
-# FILTER MAPPING DICTIONARY (Fixes Dropdown logic)
-filter_map = {
-    "XWIND": "XWIND",
-    "WINDY (Gusts >25)": "WINDY",
-    "FOG": "FOG",
-    "WINTER (Snow/FZRA)": "WINTER",
-    "TSRA": "TSRA",
-    "VIS (<Limits)": "VIS",
-    "LOW CLOUD (<Limits)": "CLOUD"
-}
-
-# 9. UI LOOP
+# 7. UI LOOP & INBOUND FLIGHT INJECTION
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
     data = weather_data.get(iata)
@@ -262,10 +266,7 @@ for iata, info in base_airports.items():
     raw_m = data['raw_m'].upper()
     
     if re.search(r'\bFG\b', raw_m): m_issues.append("FOG")
-    
-    # FIXED: Added support for -SN and +SN
     if re.search(r'(-SN|\+SN|\bSN\b|\bFZ)', raw_m): m_issues.append("WINTER")
-    
     if data.get('vis', 9999) < v_lim: m_issues.append("VIS")
     if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD")
     if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA")
@@ -285,27 +286,68 @@ for iata, info in base_airports.items():
     if m_issues: metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
     if data['f_issues']: taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
     
-    # FIXED: Tactical Dropdown Filtering
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
     elif hazard_filter not in ["Show All Network", "Any Amber/Red Alert"]:
         req_tag = filter_map.get(hazard_filter)
-        if req_tag not in m_issues and req_tag not in data['f_issues']:
-            continue
+        if req_tag not in m_issues and req_tag not in data['f_issues']: continue
     
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div></div>"""
+    # ---------------------------------------------------------
+    # CSV FLIGHT INJECTION LOGIC (No Live Planes!)
+    # ---------------------------------------------------------
+    inbound_html = ""
+    if not flight_schedule.empty:
+        arr_flights = flight_schedule[flight_schedule['ARR'] == iata].sort_values(by='STA')
+        if not arr_flights.empty:
+            rows = ""
+            for _, row in arr_flights.iterrows():
+                flt = str(row['FLT']).strip()
+                dep = str(row['DEP']).strip()
+                arr = str(row['ARR']).strip()
+                sta = str(row['STA']).strip()
+                canc = row.get('Cancellation Reason', None)
+                
+                f_status = "SCHED"
+                f_color = "#008000"
+                if pd.notna(canc):
+                    f_status = "CANC"
+                    f_color = "#d6001a"
+                elif color == "#d6001a":
+                    f_status = "AT RISK"
+                    f_color = "#d6001a"
+                elif color == "#eb8f34":
+                    f_status = "CAUTION"
+                    f_color = "#eb8f34"
+                    
+                rows += f"<tr style='border-bottom: 1px solid #ddd;'><td style='color:{f_color}; font-weight:bold; padding:4px;'>{f_status}</td><td style='padding:4px;'>{flt}</td><td style='padding:4px;'>{dep}</td><td style='padding:4px;'>{arr}</td><td style='padding:4px;'>{sta}</td></tr>"
+                
+            inbound_html = f"""
+            <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
+                <b style='color:#002366; font-size:14px;'>🛬 INBOUND FLIGHTS SCHEDULE ({selected_date})</b>
+                <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
+                    <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse;'>
+                        <tr style='background:#002366; color:#fff;'>
+                            <th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th>
+                        </tr>
+                        {rows}
+                    </table>
+                </div>
+            </div>
+            """
+    
+    shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div>{inbound_html}</div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
-# 10. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+# 8. UI RENDER
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 st_folium(m, width=1200, height=800, key="map_stable_v292")
 
-# 11. ALERTS & STRATEGY
+# 9. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)
 if metar_alerts:
     cols = st.columns(5)
@@ -347,9 +389,9 @@ if st.session_state.investigate_iata != "None":
         st.session_state.investigate_iata = "None"
         st.rerun()
 
-# 12. HANDOVER LOG
+# 10. HANDOVER LOG
 st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
 current_time = datetime.now().strftime('%H:%M')
 h_txt = f"HANDOVER {current_time}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
-st.text_area("Handover Report:", value=h_txt, height=200, key="handover_v292", label_visibility="collapsed")
+st.text_area("Handover Report:", value=h_txt, height=200, key="handover_v292_stable")

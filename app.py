@@ -5,6 +5,7 @@ from avwx import Metar, Taf
 import math
 import re
 import io
+import requests
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 
@@ -99,12 +100,30 @@ def load_schedule_robust(file_bytes):
                 break
         df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')), skiprows=skip_r, on_bad_lines='skip')
         df = df.dropna(subset=['FLT'])
-        # Parse Dates safely into Python datetime.date objects for calendar picker
         df['DATE_OBJ'] = pd.to_datetime(df['DATE'], format='%d/%m/%y', errors='coerce').dt.date
         df['DATE_OBJ'] = df['DATE_OBJ'].fillna(pd.to_datetime(df['DATE'], dayfirst=True, errors='coerce').dt.date)
         return df
     except Exception as e:
         return pd.DataFrame()
+
+# LIVE RADAR ENGINE
+@st.cache_data(ttl=20)
+def fetch_raw_radar():
+    fleet = []
+    try:
+        url = "https://opensky-network.org/api/states/all?lamin=30.0&lomin=-20.0&lamax=65.0&lomax=30.0"
+        data = requests.get(url, timeout=5).json()
+        if "states" in data and data["states"]:
+            for s in data["states"]:
+                call = (s[1] or "").strip().upper()
+                if call.startswith("CFE") or call.startswith("EFW"):
+                    fleet.append({
+                        "call": call, "lat": s[6], "lon": s[5], 
+                        "type": "CFE" if call.startswith("CFE") else "EFW",
+                        "alt": round((s[7] or 0) * 3.28084), "hdg": s[10] or 0
+                    })
+    except: pass
+    return fleet
 
 # 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
@@ -167,18 +186,15 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Upload Daily Flight Schedule (CSV)", type=["csv"])
     
     flight_schedule = pd.DataFrame()
-    # Default calendar format date picker
     selected_date = st.date_input("📅 Select Operations Date:", value=datetime.now().date())
     active_stations = set()
     
     if uploaded_file is not None:
         flight_schedule = load_schedule_robust(uploaded_file.getvalue())
         if not flight_schedule.empty and 'DATE_OBJ' in flight_schedule.columns:
-            # Filter schedule down to the date picked on the calendar
             flight_schedule = flight_schedule[flight_schedule['DATE_OBJ'] == selected_date]
             if not flight_schedule.empty:
                 st.success(f"Loaded {len(flight_schedule)} flights for {selected_date.strftime('%d %b %Y')}")
-                # Extract only the stations active on this specific day
                 active_stations = set(flight_schedule['DEP'].dropna()) | set(flight_schedule['ARR'].dropna())
             else:
                 st.warning(f"No flights found for {selected_date.strftime('%d %b %Y')}. Displaying full network.")
@@ -191,15 +207,18 @@ with st.sidebar:
     if uploaded_file is not None and active_stations:
         display_airports = {k: v for k, v in base_airports.items() if k in active_stations}
     else:
-        display_airports = base_airports # Fallback to 47 standard stations if no file or no flights
+        display_airports = base_airports
         
     st.markdown("---")
-    
     if st.button("🔄 MANUAL DATA REFRESH"):
         st.cache_data.clear()
         st.rerun()
+        
     st.markdown("---")
+    st.markdown("📡 **RADAR TRACKING**")
+    show_radar = st.checkbox("Enable Live Aircraft Radar", value=True)
     
+    st.markdown("---")
     st.markdown("🕒 **INTEL HORIZON**")
     time_horizon = st.radio("SCAN WINDOW", ["Next 6 Hours", "Next 12 Hours", "Next 24 Hours"], index=0)
     horizon_hours = 6 if "6" in time_horizon else (12 if "12" in time_horizon else 24)
@@ -220,7 +239,7 @@ with st.sidebar:
     st.markdown("---")
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 6. DATA FETCH & PROCESSING (Using Dynamically Filtered Stations)
+# 6. DATA FETCH & PROCESSING
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -294,6 +313,38 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
 
+# RADAR DATA MAPPING
+radar_data = []
+if show_radar:
+    raw_radar = fetch_raw_radar()
+    
+    # Build schedule dictionary for fast tooltip lookup
+    sched_dict = {}
+    if not flight_schedule.empty:
+        has_arcid = 'ARCID' in flight_schedule.columns
+        for _, r in flight_schedule.iterrows():
+            if has_arcid and pd.notna(r['ARCID']):
+                sched_dict[str(r['ARCID']).strip().upper()] = r
+            else:
+                flt_str = str(r['FLT']).replace('BA', '')
+                sched_dict[f"CFE{flt_str}"] = r
+                sched_dict[f"EFW{flt_str}"] = r
+
+    for p in raw_radar:
+        call = p['call']
+        flt, dep, arr, eta = call, "UKN", "UKN", "UKN"
+        if call in sched_dict:
+            flt = str(sched_dict[call]['FLT'])
+            dep = str(sched_dict[call]['DEP'])
+            arr = str(sched_dict[call]['ARR'])
+            eta = str(sched_dict[call]['STA'])
+
+        p['flt'] = flt
+        p['dep'] = dep
+        p['arr'] = arr
+        p['eta'] = eta
+        radar_data.append(p)
+
 # 7. UI LOOP & INBOUND FLIGHT INJECTION
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in display_airports.items():
@@ -333,9 +384,6 @@ for iata, info in display_airports.items():
     
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
-    # ---------------------------------------------------------
-    # CSV FLIGHT INJECTION LOGIC
-    # ---------------------------------------------------------
     inbound_html = ""
     if not flight_schedule.empty:
         arr_flights = flight_schedule[flight_schedule['ARR'] == iata].sort_values(by='STA')
@@ -380,11 +428,24 @@ for iata, info in display_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 8. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Dynamic Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Radar & Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
+
+# Render Station Markers
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
+
+# Render Aircraft Markers (If Enabled)
+if show_radar:
+    for p in radar_data:
+        p_color = "#00bfff" if p['type']=="CFE" else "#ff4500"
+        icon_html = f'<div style="transform: rotate({p["hdg"]}deg); font-size: 22px; color: {p_color}; text-shadow: 0 0 5px #000;"><i class="fa fa-plane"></i></div>'
+        folium.Marker(
+            [p['lat'], p['lon']], icon=folium.DivIcon(html=icon_html),
+            tooltip=f"<div style='font-family:Arial; font-size:14px; color:#002366; padding:5px;'><b>FLT: {p['flt']}</b><hr style='margin:4px 0;'>DEP: {p['dep']} | ARR: {p['arr']}<br>ETA/STA: {p['eta']}<br>Height: {p['alt']} ft</div>"
+        ).add_to(m)
+
 st_folium(m, width=1200, height=800, key="map_stable_v292")
 
 # 9. ALERTS & STRATEGY
@@ -410,13 +471,11 @@ if st.session_state.investigate_iata != "None":
     cur_xw = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     
     alt_list = []
-    # Note: Alternates are calculated using the full 47 base_airports network, not just the active flights
     for g in [a for a in base_airports.keys() if a not in metar_alerts and a not in taf_alerts]:
         if g != iata and g in base_airports:
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
-            # We fetch alternate weather separately to ensure we have data even if it was hidden from the map
             alt_xw = 0
-            score = (dist * 0.6) + (alt_xw * 2.5) # simplified fallback for alternatates if dynamically filtered out
+            score = (dist * 0.6) + (alt_xw * 2.5)
             alt_list.append({"iata": g, "dist": dist, "xw": "CHK", "score": score})
     alt_list = sorted(alt_list, key=lambda x: x['score'])[:3]
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"

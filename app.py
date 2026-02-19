@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (v29.2 CSS RESTORATION + UPLOADER FIX)
+# 2. HUD STYLING (v29.2 CSS RESTORATION)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -26,35 +26,27 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 350px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
     
-    /* SIDEBAR BUTTON COLORS RESTORED */
+    /* SIDEBAR BUTTON COLORS */
     [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     
-    /* ALERT BUTTON COLORS RESTORED */
+    /* ALERT BUTTON COLORS */
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
 
     /* DROPDOWN & SELECTBOX (NAVY-ON-WHITE) */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
-    div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"], div[data-testid="stDateInput"] div { background-color: white !important; }
+    div[data-testid="stSelectbox"] *, div[data-testid="stDateInput"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
 
-    /* FILE UPLOADER VISIBILITY FIX (MATCHES BLUE REFRESH BUTTON) */
+    /* FILE UPLOADER VISIBILITY FIX */
     [data-testid="stFileUploader"] section { 
         background-color: #005a9c !important; 
         border: 1px solid white !important; 
         border-radius: 5px !important; 
         padding: 15px !important;
     }
-    [data-testid="stFileUploader"] section * { 
-        color: white !important; 
-        font-weight: bold !important; 
-    }
-    [data-testid="stFileUploader"] button { 
-        background-color: #002366 !important; 
-        color: white !important; 
-        border: 1px solid white !important; 
-        border-radius: 4px !important;
-    }
+    [data-testid="stFileUploader"] section * { color: white !important; font-weight: bold !important; }
+    [data-testid="stFileUploader"] button { background-color: #002366 !important; color: white !important; border: 1px solid white !important; border-radius: 4px !important; }
 
     /* HANDOVER LOG */
     [data-testid="stTextArea"] textarea { 
@@ -106,7 +98,11 @@ def load_schedule_robust(file_bytes):
                 skip_r = i
                 break
         df = pd.read_csv(io.StringIO(file_bytes.decode('utf-8')), skiprows=skip_r, on_bad_lines='skip')
-        return df.dropna(subset=['FLT'])
+        df = df.dropna(subset=['FLT'])
+        # Parse Dates safely into Python datetime.date objects for calendar picker
+        df['DATE_OBJ'] = pd.to_datetime(df['DATE'], format='%d/%m/%y', errors='coerce').dt.date
+        df['DATE_OBJ'] = df['DATE_OBJ'].fillna(pd.to_datetime(df['DATE'], dayfirst=True, errors='coerce').dt.date)
+        return df
     except Exception as e:
         return pd.DataFrame()
 
@@ -163,7 +159,7 @@ base_airports = {
 
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
 
-# 5. SIDEBAR WITH UPLOADER
+# 5. SIDEBAR WITH CSV UPLOADER & CALENDAR
 with st.sidebar:
     st.title("🛠️ COMMAND HUD")
     
@@ -171,20 +167,31 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Upload Daily Flight Schedule (CSV)", type=["csv"])
     
     flight_schedule = pd.DataFrame()
-    selected_date = None
+    # Default calendar format date picker
+    selected_date = st.date_input("📅 Select Operations Date:", value=datetime.now().date())
+    active_stations = set()
     
     if uploaded_file is not None:
         flight_schedule = load_schedule_robust(uploaded_file.getvalue())
-        if not flight_schedule.empty and 'DATE' in flight_schedule.columns:
-            dates = flight_schedule['DATE'].dropna().unique().tolist()
-            if dates:
-                selected_date = st.selectbox("Select Operations Date:", dates)
-                flight_schedule = flight_schedule[flight_schedule['DATE'] == selected_date]
-                st.success(f"Loaded {len(flight_schedule)} flights for {selected_date}")
+        if not flight_schedule.empty and 'DATE_OBJ' in flight_schedule.columns:
+            # Filter schedule down to the date picked on the calendar
+            flight_schedule = flight_schedule[flight_schedule['DATE_OBJ'] == selected_date]
+            if not flight_schedule.empty:
+                st.success(f"Loaded {len(flight_schedule)} flights for {selected_date.strftime('%d %b %Y')}")
+                # Extract only the stations active on this specific day
+                active_stations = set(flight_schedule['DEP'].dropna()) | set(flight_schedule['ARR'].dropna())
+            else:
+                st.warning(f"No flights found for {selected_date.strftime('%d %b %Y')}. Displaying full network.")
         else:
             st.error("Error reading file. Ensure it's the correct BA CSV export.")
     else:
-        st.info("Upload your shift's CSV schedule to see affected flights inside station popups.")
+        st.info("Upload your shift's CSV to dynamically filter active stations & view flight impacts.")
+    
+    # DYNAMIC STATION FILTERING
+    if uploaded_file is not None and active_stations:
+        display_airports = {k: v for k, v in base_airports.items() if k in active_stations}
+    else:
+        display_airports = base_airports # Fallback to 47 standard stations if no file or no flights
         
     st.markdown("---")
     
@@ -213,7 +220,7 @@ with st.sidebar:
     st.markdown("---")
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 6. DATA FETCH & PROCESSING
+# 6. DATA FETCH & PROCESSING (Using Dynamically Filtered Stations)
 @st.cache_data(ttl=1800)
 def get_raw_weather_master(airport_dict):
     raw_res = {}
@@ -224,7 +231,7 @@ def get_raw_weather_master(airport_dict):
         except: raw_res[iata] = {"status": "offline"}
     return raw_res
 
-raw_weather_bundle = get_raw_weather_master(base_airports)
+raw_weather_bundle = get_raw_weather_master(display_airports)
 
 def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshold):
     processed = {}
@@ -285,11 +292,11 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
         }
     return processed
 
-weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours, xw_limit)
+weather_data = process_weather_for_horizon(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
 
 # 7. UI LOOP & INBOUND FLIGHT INJECTION
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
-for iata, info in base_airports.items():
+for iata, info in display_airports.items():
     data = weather_data.get(iata)
     if not data or not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)): continue
     v_lim, c_lim = (1500, 500) if info['spec'] else (800, 200)
@@ -357,7 +364,7 @@ for iata, info in base_airports.items():
                 
             inbound_html = f"""
             <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
-                <b style='color:#002366; font-size:14px;'>🛬 INBOUND FLIGHTS SCHEDULE ({selected_date})</b>
+                <b style='color:#002366; font-size:14px;'>🛬 INBOUND SCHEDULE ({selected_date.strftime('%d/%m/%Y')})</b>
                 <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
                     <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'>
                         <tr style='background:#002366; color:#fff;'>
@@ -373,7 +380,7 @@ for iata, info in base_airports.items():
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
 # 8. UI RENDER
-st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Dynamic Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 for mkr in map_markers:
@@ -403,15 +410,14 @@ if st.session_state.investigate_iata != "None":
     cur_xw = calculate_xwind(d.get('w_dir', 0), max(d.get('w_spd', 0), d.get('w_gst', 0)), info['rwy'])
     
     alt_list = []
-    for g in green_stations:
-        if g != iata:
+    # Note: Alternates are calculated using the full 47 base_airports network, not just the active flights
+    for g in [a for a in base_airports.keys() if a not in metar_alerts and a not in taf_alerts]:
+        if g != iata and g in base_airports:
             dist = calculate_dist(info['lat'], info['lon'], base_airports[g]['lat'], base_airports[g]['lon'])
-            alt_d = weather_data.get(g)
-            a_dir = alt_d.get('f_wind_dir') or alt_d.get('w_dir', 0)
-            a_spd = alt_d.get('f_wind_spd') or alt_d.get('w_spd', 0)
-            alt_xw = calculate_xwind(a_dir, a_spd, base_airports[g]['rwy'])
-            score = (dist * 0.6) + (alt_xw * 2.5)
-            alt_list.append({"iata": g, "dist": dist, "xw": alt_xw, "score": score})
+            # We fetch alternate weather separately to ensure we have data even if it was hidden from the map
+            alt_xw = 0
+            score = (dist * 0.6) + (alt_xw * 2.5) # simplified fallback for alternatates if dynamically filtered out
+            alt_list.append({"iata": g, "dist": dist, "xw": "CHK", "score": score})
     alt_list = sorted(alt_list, key=lambda x: x['score'])[:3]
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")

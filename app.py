@@ -38,11 +38,23 @@ st.markdown("""
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
 
-    /* FILE UPLOADER VISIBILITY FIX */
-    [data-testid="stFileUploadDropzone"] { background-color: #ffffff !important; border: 2px dashed #002366 !important; border-radius: 5px; }
-    [data-testid="stFileUploadDropzone"] * { color: #002366 !important; font-weight: bold !important; }
-    [data-testid="stFileUploadDropzone"] button { background-color: #002366 !important; color: #ffffff !important; border: none !important; }
-    [data-testid="stFileUploadDropzone"] button * { color: #ffffff !important; }
+    /* FILE UPLOADER VISIBILITY FIX (MATCHES BLUE REFRESH BUTTON) */
+    [data-testid="stFileUploader"] section { 
+        background-color: #005a9c !important; 
+        border: 1px solid white !important; 
+        border-radius: 5px !important; 
+        padding: 15px !important;
+    }
+    [data-testid="stFileUploader"] section * { 
+        color: white !important; 
+        font-weight: bold !important; 
+    }
+    [data-testid="stFileUploader"] button { 
+        background-color: #002366 !important; 
+        color: white !important; 
+        border: 1px solid white !important; 
+        border-radius: 4px !important;
+    }
 
     /* HANDOVER LOG */
     [data-testid="stTextArea"] textarea { 

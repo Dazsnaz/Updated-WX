@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING
+# 2. HUD STYLING (ANTI-GREY OUT + CSS)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
@@ -34,7 +34,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. UTILITIES
+# 3. CORE UTILITIES
 def calculate_dist(lat1, lon1, lat2, lon2):
     R = 3440.065 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -68,6 +68,16 @@ def load_schedule_robust(file_bytes):
         return df
     except: return pd.DataFrame()
 
+@st.cache_data(ttl=1800)
+def get_raw_weather_master(airport_dict):
+    raw_res = {}
+    for iata, info in airport_dict.items():
+        try:
+            m = Metar(info['icao']); m.update(); t = Taf(info['icao']); t.update()
+            raw_res[iata] = {"m_obj": m, "t_obj": t, "status": "online"}
+        except: raw_res[iata] = {"status": "offline"}
+    return raw_res
+
 @st.cache_data(ttl=20)
 def fetch_raw_radar():
     fleet = []
@@ -84,7 +94,7 @@ def fetch_raw_radar():
     except: pass
     return fleet
 
-# 4. MASTER DATABASE (FULL 47 STATIONS)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -166,7 +176,7 @@ with st.sidebar:
     show_ef = st.checkbox("Euroflyer (EFW)", value=True)
     map_theme = st.radio("MAP THEME", ["Dark Mode", "Light Mode"])
 
-# 7. WEATHER PROCESSING
+# 7. WEATHER DATA FETCH
 raw_weather_bundle = get_raw_weather_master(display_airports)
 
 def process_weather(bundle, airport_dict, horizon_limit, xw_threshold):
@@ -197,7 +207,7 @@ def process_weather(bundle, airport_dict, horizon_limit, xw_threshold):
 
 weather_data = process_weather(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
 
-# 8. MAPPING & SCHEDULE PREP
+# 8. MAPPING PREP
 sched_dict = {}
 if not flight_schedule.empty:
     has_arcid = 'ARCID' in flight_schedule.columns
@@ -208,32 +218,28 @@ if not flight_schedule.empty:
 
 current_utc_time = datetime.now(timezone.utc).strftime('%H:%M')
 map_markers = []
-metar_alerts, taf_alerts, green_stations = {}, {}, []
+metar_alerts, taf_alerts = {}, {}
 
 for iata, info in display_airports.items():
     d = weather_data.get(iata)
     if not d or not ((info['fleet'] == "Cityflyer" and show_cf) or (info['fleet'] == "Euroflyer" and show_ef)): continue
-    m_issues = []
     cur_xw = calculate_xwind(d['w_dir'], max(d['w_spd'], d['w_gst']), info['rwy'])
-    if d['vis'] < (1500 if info['spec'] else 800): m_issues.append("VIS")
-    if cur_xw >= xw_limit: m_issues.append("XWIND")
     color = "#008000"
-    if m_issues: color = "#d6001a"; metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary"}
-    elif d['f_issues']: color = "#eb8f34"; taf_alerts[iata] = {"type": "/".join(d['f_issues']), "time": d['f_time'], "hex": "secondary"}
-    else: green_stations.append(iata)
+    if d['vis'] < (1500 if info['spec'] else 800) or cur_xw >= xw_limit:
+        color = "#d6001a"; metar_alerts[iata] = {"type": "NOW", "hex": "primary"}
+    elif d['f_issues']: 
+        color = "#eb8f34"; taf_alerts[iata] = {"type": d['f_time'], "hex": "secondary"}
     
     rows = ""
     if not flight_schedule.empty:
         arr_f = flight_schedule[(flight_schedule['ARR'] == iata) & (flight_schedule['STA'] >= current_utc_time)].sort_values('STA')
         for _, r in arr_f.iterrows():
-            f_stat = "AT RISK" if color=="#d6001a" else ("CAUTION" if color=="#eb8f34" else "SCHED")
-            rows += f"<tr><td>{f_stat}</td><td>{r['FLT']}</td><td>{r['DEP']}</td><td>{r['STA']}</td></tr>"
+            rows += f"<tr><td>{r['FLT']}</td><td>{r['DEP']}</td><td>{r['STA']}</td></tr>"
     
-    inbound_table = f"<table style='width:100%; font-size:12px; margin-top:10px;'>{rows}</table>" if rows else ""
-    content = f"<div style='color:black; width:400px;'><b>{iata} STATUS</b><br>METAR: {bold_hazard(d['raw_m'])}<br>TAF: {bold_hazard(d['raw_t'])}<br>{inbound_table}</div>"
+    content = f"<div style='color:black; width:400px;'><b>{iata} STATUS</b><br>METAR: {bold_hazard(d['raw_m'])}<br>TAF: {bold_hazard(d['raw_t'])}<br><table style='width:100%; font-size:12px; margin-top:10px;'>{rows}</table></div>"
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": content})
 
-# 9. RADAR FRAGMENT
+# 9. LIVE RADAR FRAGMENT
 st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=20)
@@ -261,8 +267,5 @@ def live_radar_map(cf_on, ef_on, scheduler):
 live_radar_map(show_cf, show_ef, sched_dict)
 
 # 10. ALERTS & LOG
-st.markdown('<div class="section-header">🔴 Actual Alerts</div>', unsafe_allow_html=True)
-if metar_alerts:
-    cols = st.columns(5)
-    for i, (iata, d) in enumerate(metar_alerts.items()):
-        with cols[i % 5]: st.button(f"{iata} {d['type']}", key=f"m_{iata}", type=d['hex'])
+st.markdown('<div class="section-header">📝 Shift Handover Log</div>', unsafe_allow_html=True)
+st.text_area("Log:", value=f"HANDOVER {current_utc_time}Z | SCAN: {time_horizon}", height=150)

@@ -70,13 +70,13 @@ def bold_hazard(text):
     text = re.sub(r'(\b\d{4}/\d{4}\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}\d{2}G\d{2,3}KT\b)', r'<b>\1</b>', text)
     text = re.sub(r'(\b\d{3}[2-9]\dKT\b)', r'<b>\1</b>', text)
-    text = re.sub(r'(\b(FG|TSRA|SN|-SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
+    text = re.sub(r'(\b(FG|TSRA|SN|-SN|\+SN|FZRA|FZDZ|TS|FOG)\b)', r'<b>\1</b>', text)
     text = re.sub(r'\b((?:BKN|OVC)00[0-9])\b', r'<b>\1</b>', text)
     text = re.sub(r'\b((?:BKN|OVC)01[0-5])\b', r'<b>\1</b>', text)
     text = re.sub(r'\b(0[0-9]{3})\b', r'<b>\1</b>', text)
     return text
 
-# 4. MASTER DATABASE (FULL 47 STATIONS - SYNTAX FIXED)
+# 4. MASTER DATABASE (FULL 47 STATIONS)
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -148,7 +148,11 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("🎯 **TACTICAL FILTERS**")
-    hazard_filter = st.selectbox("ISOLATE HAZARD", ["Show All Network", "Any Amber/Red Alert", "XWIND", "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"])
+    hazard_filter = st.selectbox("ISOLATE HAZARD", [
+        "Show All Network", "Any Amber/Red Alert", "XWIND", 
+        "WINDY (Gusts >25)", "FOG", "WINTER (Snow/FZRA)", 
+        "TSRA", "VIS (<Limits)", "LOW CLOUD (<Limits)"
+    ])
     
     st.markdown("---")
     show_cf = st.checkbox("Cityflyer (CFE)", value=True)
@@ -201,7 +205,10 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
                         if lyr.type in ['BKN', 'OVC'] and lyr.base: l_c = min(l_c, lyr.base * 100)
                 
                 if re.search(r'\bFG\b', l_raw): l_issues.append("FOG")
-                if re.search(r'\bSN\b|\bFZ', l_raw): l_issues.append("WINTER")
+                
+                # FIXED: Added support for -SN and +SN
+                if re.search(r'(-SN|\+SN|\bSN\b|\bFZ)', l_raw): l_issues.append("WINTER")
+                
                 if l_v < v_lim: l_issues.append("VIS")
                 if l_c < c_lim: l_issues.append("CLOUD")
                 if re.search(r'\bTS|VCTS', l_raw): l_issues.append("TSRA")
@@ -232,6 +239,17 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, base_airports, horizon_hours, xw_limit)
 
+# FILTER MAPPING DICTIONARY (Fixes Dropdown logic)
+filter_map = {
+    "XWIND": "XWIND",
+    "WINDY (Gusts >25)": "WINDY",
+    "FOG": "FOG",
+    "WINTER (Snow/FZRA)": "WINTER",
+    "TSRA": "TSRA",
+    "VIS (<Limits)": "VIS",
+    "LOW CLOUD (<Limits)": "CLOUD"
+}
+
 # 9. UI LOOP
 metar_alerts, taf_alerts, green_stations, map_markers = {}, {}, [], []
 for iata, info in base_airports.items():
@@ -244,7 +262,10 @@ for iata, info in base_airports.items():
     raw_m = data['raw_m'].upper()
     
     if re.search(r'\bFG\b', raw_m): m_issues.append("FOG")
-    if re.search(r'\bSN\b|\bFZ', raw_m): m_issues.append("WINTER")
+    
+    # FIXED: Added support for -SN and +SN
+    if re.search(r'(-SN|\+SN|\bSN\b|\bFZ)', raw_m): m_issues.append("WINTER")
+    
     if data.get('vis', 9999) < v_lim: m_issues.append("VIS")
     if data.get("cig", 9999) < c_lim: m_issues.append("CLOUD")
     if re.search(r'\bTS|VCTS', raw_m): m_issues.append("TSRA")
@@ -264,9 +285,12 @@ for iata, info in base_airports.items():
     if m_issues: metar_alerts[iata] = {"type": "/".join(m_issues), "hex": "primary" if color == "#d6001a" else "secondary"}
     if data['f_issues']: taf_alerts[iata] = {"type": "+".join(data['f_issues']), "time": data['f_time'], "prob": data['f_prob'], "hex": "secondary"}
     
-    all_summary = "/".join(m_issues) + "".join(data['f_issues'])
+    # FIXED: Tactical Dropdown Filtering
     if hazard_filter == "Any Amber/Red Alert" and color == "#008000": continue
-    elif hazard_filter != "Show All Network" and hazard_filter not in all_summary: continue
+    elif hazard_filter not in ["Show All Network", "Any Amber/Red Alert"]:
+        req_tag = filter_map.get(hazard_filter)
+        if req_tag not in m_issues and req_tag not in data['f_issues']:
+            continue
     
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     

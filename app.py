@@ -12,47 +12,56 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️", initial_sidebar_state="expanded")
 
-# 2. FULL SCREEN UI & 15-MIN BROWSER REFRESH
+# 2. TRUE FULL SCREEN CSS ENGINE
 st.markdown('<meta http-equiv="refresh" content="900">', unsafe_allow_html=True)
 
 st.markdown("""
     <style>
-    /* 1. REMOVE ALL STREAMLIT PADDING */
+    /* 1. HIDE STREAMLIT WHITE SPACE */
     .block-container {
-        padding-top: 0rem !important;
-        padding-bottom: 0rem !important;
-        padding-left: 0rem !important;
-        padding-right: 0rem !important;
+        padding: 0 !important;
         max-width: 100% !important;
+        overflow: hidden !important;
     }
     
-    /* 2. MAKE HEADER TRANSPARENT (Keeps Sidebar Toggle Visible) */
+    /* 2. MAKE THE MAP TRULY FULL SCREEN & FIXED IN THE BACKGROUND */
+    iframe[title="streamlit_folium.st_folium"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 0 !important;
+        border: none !important;
+    }
+    
+    /* 3. KEEP HEADER TRANSPARENT BUT FLOAT IT OVER THE MAP */
     header[data-testid="stHeader"] {
         background: transparent !important;
+        z-index: 999999 !important; 
     }
     
-    /* 3. HIDE RIGHT-SIDE TOOLBAR ONLY */
-    .stAppToolbar {
-        display: none !important;
-    }
-    
-    /* 4. STYLE THE SIDEBAR TOGGLE BUTTON SO IT IS HIGHLY VISIBLE */
-    button[kind="header"] {
+    /* 4. HIGH VISIBILITY SIDEBAR TOGGLE ARROW (Top Left) */
+    [data-testid="collapsedControl"] {
         background-color: #002366 !important;
-        color: white !important;
+        border: 2px solid #d6001a !important;
         border-radius: 5px !important;
-        margin-top: 10px !important;
-        margin-left: 10px !important;
+        margin-top: 15px !important;
+        margin-left: 15px !important;
+        padding: 5px !important;
+        z-index: 999999 !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: white !important;
+        color: white !important;
     }
     
-    /* 5. FORCE THE MAP TO FILL 100% OF THE MONITOR HEIGHT */
-    iframe {
-        height: 100vh !important;
-        max-height: 100vh !important;
-    }
+    /* 5. HIDE TOP-RIGHT MENU (3 DOTS) */
+    .stAppToolbar { display: none !important; }
     
-    /* 6. SIDEBAR COLORS */
-    div[data-testid="stSidebar"] { background-color: #002366 !important; min-width: 380px !important; border-right: 3px solid #d6001a; }
+    /* 6. SIDEBAR STYLING */
+    div[data-testid="stSidebar"] { background-color: #002366 !important; min-width: 380px !important; border-right: 3px solid #d6001a; z-index: 999999 !important;}
     div[data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
     
     .stButton button { width: 100% !important; border: 1px solid white !important; font-weight: bold !important; }
@@ -66,14 +75,15 @@ st.markdown("""
     div[data-testid="stSelectbox"] p, div[data-testid="stDateInput"] p { color: #002366 !important; font-weight: 800 !important; }
     div[data-testid="stSelectbox"] span, div[data-testid="stDateInput"] span { color: #002366 !important; font-weight: 800 !important; }
     
-    /* 7. FLOATING HUD */
-    .floating-hud { position: fixed; top: 20px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 999999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
+    /* 7. FLOATING HUD (Top Right) */
+    .floating-hud { position: fixed; top: 15px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 999998; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
     
-    /* 8. STRATEGY BRIEF POPUP */
-    .reason-box { position: absolute; z-index: 999999; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; width: 90%; max-width: 1400px; border-top: 10px solid #d6001a; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    /* 8. FLOATING STRATEGY BRIEF (Bottom Center) */
+    .reason-box { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 999998; width: 90%; max-width: 1400px; background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; border-top: 10px solid #d6001a; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
     .reason-box p, .reason-box h3, .reason-box td, .reason-box th, .reason-box b, .reason-box div, .reason-box span { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
     
+    /* 9. MAP POPUPS */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -385,7 +395,6 @@ for iata, info in display_airports.items():
     shared_content = f"""<div style="width:580px; color:black !important; font-family:monospace; font-size:14px; background:white; padding:15px; border-radius:5px;"><b style="color:#002366; font-size:18px;">{iata} STATUS {trend_icon}</b><div style="margin-top:8px; padding:10px; border-left:6px solid {color}; background:#f9f9f9; font-size:16px;"><b style="color:#002366;">{rwy_text} X-Wind:</b> <b>{cur_xw} KT</b><br><b>ACTUAL:</b> {"/".join(m_issues) if m_issues else "STABLE"}<br><b>FORECAST ({time_horizon}):</b> {"+".join(data['f_issues']) if data['f_issues'] else "NIL"}</div><hr style="border:1px solid #ddd;"><div style="display:flex; gap:12px;"><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>METAR</b><br>{m_bold}</div><div style="flex:1; background:#f0f0f0; padding:10px; border-radius:4px; white-space: pre-wrap; word-wrap: break-word;"><b>TAF</b><br>{t_bold}</div></div>{inbound_html}</div>"""
     map_markers.append({"lat": info['lat'], "lon": info['lon'], "color": color, "content": shared_content, "iata": iata, "trend": trend_icon})
 
-
 # 9. INJECT ALERTS INTO THE SIDEBAR TOP PLACEHOLDER
 with alerts_container:
     if not metar_alerts and not taf_alerts:
@@ -403,14 +412,12 @@ with alerts_container:
             if st.button(f"{iata} | {d['time']} {d['type']}", key=f"f_{iata}", type="secondary", use_container_width=True): 
                 st.session_state.investigate_iata = iata
 
-
 # 10. INJECT HANDOVER LOG INTO BOTTOM EXPANDER
 h_txt = f"HANDOVER {display_time}Z | SCAN WINDOW: {time_horizon}\n" + "="*50 + "\n"
 for i_ata, d_taf in taf_alerts.items(): h_txt += f"{i_ata}: {d_taf['type']} ({d_taf['time']})\n"
 with log_container:
     with st.expander("📝 SHIFT HANDOVER LOG", expanded=False):
         st.text_area("Handover Report:", value=h_txt, height=200, key="handover_log", label_visibility="collapsed")
-
 
 # 11. RENDER FULL SCREEN MAP & FLOATING HUD
 st.markdown(f'''
@@ -425,9 +432,8 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-# Setting a very large fallback height, CSS forces it to match monitor height (100vh) exactly
-st_folium(m, width=None, height=1200, use_container_width=True, key="map_stable_v30")
-
+# st_folium wraps the map; CSS forces the iframe inside to break out and stretch 100vh!
+st_folium(m, width=None, height=1000, use_container_width=True, key="map_stable_v30")
 
 # 12. RENDER STRATEGY BRIEF FLOATING AT THE BOTTOM
 if st.session_state.investigate_iata != "None":
@@ -456,7 +462,6 @@ if st.session_state.investigate_iata != "None":
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")
     
-    # Strategy Brief box rendered as an absolute overlay
     st.markdown(f"""
     <div class="reason-box">
         <h3 style="margin-top:0;">{iata} Strategy Brief {this_trend}</h3>

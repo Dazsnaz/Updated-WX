@@ -11,28 +11,49 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC Command HUD", page_icon="✈️")
 
-# 2. HUD STYLING (v29.2 CSS RESTORATION)
+# 2. HUD STYLING (v29.2 CSS RESTORATION + UPLOADER FIX)
 st.markdown("""
     <style>
     .main { background-color: #001a33 !important; }
     html, body, [class*="st-"], div, p, h1, h2, h4, label { color: white !important; }
+    
     .ba-header { 
         background-color: #002366 !important; color: #ffffff !important; 
         padding: 20px; border-radius: 8px; margin-bottom: 20px; 
         border: 2px solid #d6001a; display: flex; justify-content: space-between;
     }
-    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 320px !important; border-right: 3px solid #d6001a; }
+
+    [data-testid="stSidebar"] { background-color: #002366 !important; min-width: 350px !important; border-right: 3px solid #d6001a; }
     [data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
+    
+    /* SIDEBAR BUTTON COLORS RESTORED */
     [data-testid="stSidebar"] .stButton > button { background-color: #005a9c !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
+    
+    /* ALERT BUTTON COLORS RESTORED */
     .stButton > button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton > button[kind="primary"] { background-color: #d6001a !important; color: white !important; border: 1px solid white !important; font-weight: bold !important; }
+
+    /* DROPDOWN & SELECTBOX (NAVY-ON-WHITE) */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] { background-color: white !important; }
     div[data-testid="stSelectbox"] * { color: #002366 !important; font-weight: 800 !important; }
     [data-baseweb="popover"] * { color: #002366 !important; background-color: white !important; font-weight: bold !important; }
-    [data-testid="stTextArea"] textarea { color: #002366 !important; background-color: #ffffff !important; font-weight: bold !important; font-family: 'Courier New', monospace !important; }
+
+    /* FILE UPLOADER VISIBILITY FIX */
+    [data-testid="stFileUploadDropzone"] { background-color: #ffffff !important; border: 2px dashed #002366 !important; border-radius: 5px; }
+    [data-testid="stFileUploadDropzone"] * { color: #002366 !important; font-weight: bold !important; }
+    [data-testid="stFileUploadDropzone"] button { background-color: #002366 !important; color: #ffffff !important; border: none !important; }
+    [data-testid="stFileUploadDropzone"] button * { color: #ffffff !important; }
+
+    /* HANDOVER LOG */
+    [data-testid="stTextArea"] textarea { 
+        color: #002366 !important; background-color: #ffffff !important; 
+        font-weight: bold !important; font-family: 'Courier New', monospace !important; 
+    }
+
     .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin-top: 20px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     .reason-box * { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
+    
     .section-header { color: #ffffff !important; background-color: #002366; padding: 10px; border-left: 10px solid #d6001a; font-weight: bold; font-size: 1.5rem; margin-top: 30px; }
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
@@ -294,7 +315,7 @@ for iata, info in base_airports.items():
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
     # ---------------------------------------------------------
-    # CSV FLIGHT INJECTION LOGIC (No Live Planes!)
+    # CSV FLIGHT INJECTION LOGIC
     # ---------------------------------------------------------
     inbound_html = ""
     if not flight_schedule.empty:
@@ -310,7 +331,7 @@ for iata, info in base_airports.items():
                 
                 f_status = "SCHED"
                 f_color = "#008000"
-                if pd.notna(canc):
+                if pd.notna(canc) and str(canc).strip() != "":
                     f_status = "CANC"
                     f_color = "#d6001a"
                 elif color == "#d6001a":
@@ -326,7 +347,7 @@ for iata, info in base_airports.items():
             <div style='margin-top:15px; border-top: 2px solid #002366; padding-top:10px;'>
                 <b style='color:#002366; font-size:14px;'>🛬 INBOUND FLIGHTS SCHEDULE ({selected_date})</b>
                 <div style='max-height: 200px; overflow-y: auto; margin-top:5px; border: 1px solid #ccc; background: #fff;'>
-                    <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse;'>
+                    <table style='width:100%; text-align:left; font-size:12px; border-collapse: collapse; color: #000;'>
                         <tr style='background:#002366; color:#fff;'>
                             <th style='padding:5px;'>Status</th><th style='padding:5px;'>FLT</th><th style='padding:5px;'>DEP</th><th style='padding:5px;'>ARR</th><th style='padding:5px;'>STA</th>
                         </tr>

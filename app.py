@@ -313,7 +313,7 @@ def process_weather_for_horizon(bundle, airport_dict, horizon_limit, xw_threshol
 
 weather_data = process_weather_for_horizon(raw_weather_bundle, display_airports, horizon_hours, xw_limit)
 
-# RADAR DATA MAPPING
+# RADAR DATA MAPPING & LOOKUP LOGIC
 radar_data = []
 if show_radar:
     raw_radar = fetch_raw_radar()
@@ -323,26 +323,29 @@ if show_radar:
     if not flight_schedule.empty:
         has_arcid = 'ARCID' in flight_schedule.columns
         for _, r in flight_schedule.iterrows():
-            if has_arcid and pd.notna(r['ARCID']):
+            # Only exact mapping works perfectly (requires ARCID in CSV)
+            if has_arcid and pd.notna(r['ARCID']) and str(r['ARCID']).strip():
                 sched_dict[str(r['ARCID']).strip().upper()] = r
-            else:
-                flt_str = str(r['FLT']).replace('BA', '')
+            
+            # Fallback basic map just in case the ATC callsign exactly matches the FLT number (e.g. CFE8721)
+            if pd.notna(r['FLT']):
+                flt_str = str(r['FLT']).replace('BA', '').strip()
                 sched_dict[f"CFE{flt_str}"] = r
                 sched_dict[f"EFW{flt_str}"] = r
 
     for p in raw_radar:
         call = p['call']
-        flt, dep, arr, eta = call, "UKN", "UKN", "UKN"
+        flt, dep, arr = call, "UKN", "UKN"
+        
+        # Link Radar to Schedule
         if call in sched_dict:
             flt = str(sched_dict[call]['FLT'])
             dep = str(sched_dict[call]['DEP'])
             arr = str(sched_dict[call]['ARR'])
-            eta = str(sched_dict[call]['STA'])
 
         p['flt'] = flt
         p['dep'] = dep
         p['arr'] = arr
-        p['eta'] = eta
         radar_data.append(p)
 
 # 7. UI LOOP & INBOUND FLIGHT INJECTION
@@ -384,6 +387,7 @@ for iata, info in display_airports.items():
     
     m_bold, t_bold = bold_hazard(data.get('raw_m', 'N/A')), bold_hazard(data.get('raw_t', 'N/A'))
     
+    # SCHEDULE INJECTION HTML
     inbound_html = ""
     if not flight_schedule.empty:
         arr_flights = flight_schedule[flight_schedule['ARR'] == iata].sort_values(by='STA')
@@ -440,10 +444,20 @@ for mkr in map_markers:
 if show_radar:
     for p in radar_data:
         p_color = "#00bfff" if p['type']=="CFE" else "#ff4500"
-        icon_html = f'<div style="transform: rotate({p["hdg"]}deg); font-size: 22px; color: {p_color}; text-shadow: 0 0 5px #000;"><i class="fa fa-plane"></i></div>'
+        
+        # New Sharp SVG Airplane Vector
+        svg_html = f'''
+        <div style="transform: translate(-50%, -50%) rotate({p["hdg"]}deg); width: 20px; height: 20px;">
+            <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21,16v-2l-8-5V3.5C13,2.67,12.33,2,11.5,2S10,2.67,10,3.5V9l-8,5v2l8-2.5V19l-2,1.5V22l3.5-1l3.5,1v-1.5L13,19v-5.5L21,16z" 
+                      fill="{p_color}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        '''
         folium.Marker(
-            [p['lat'], p['lon']], icon=folium.DivIcon(html=icon_html),
-            tooltip=f"<div style='font-family:Arial; font-size:14px; color:#002366; padding:5px;'><b>FLT: {p['flt']}</b><hr style='margin:4px 0;'>DEP: {p['dep']} | ARR: {p['arr']}<br>ETA/STA: {p['eta']}<br>Height: {p['alt']} ft</div>"
+            [p['lat'], p['lon']], 
+            icon=folium.DivIcon(html=svg_html, class_name="dummy"),
+            tooltip=f"<div style='font-family:Arial; font-size:13px; color:#002366; padding:5px; text-align:center;'><b>FLT: {p['flt']}</b><hr style='margin:4px 0;'>DEP: {p['dep']} | ARR: {p['arr']}<br>Height: {p['alt']} ft</div>"
         ).add_to(m)
 
 st_folium(m, width=1200, height=800, key="map_stable_v292")

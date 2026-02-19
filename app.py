@@ -322,11 +322,8 @@ sched_dict = {}
 if not flight_schedule.empty:
     has_arcid = 'ARCID' in flight_schedule.columns
     for _, r in flight_schedule.iterrows():
-        # Map by Exact ATC Callsign if it exists
         if has_arcid and pd.notna(r['ARCID']) and str(r['ARCID']).strip():
             sched_dict[str(r['ARCID']).strip().upper()] = r
-        
-        # Fallback dictionary for pure flight numbers
         if pd.notna(r['FLT']):
             flt_str = str(r['FLT']).replace('BA', '').strip()
             sched_dict[f"CFE{flt_str}"] = r
@@ -431,7 +428,7 @@ for iata, info in display_airports.items():
 st.markdown(f'<div class="ba-header"><div>OCC HUD v29.2 (Radar & Schedule Active)</div><div>{datetime.now().strftime("%H:%M")} UTC</div></div>', unsafe_allow_html=True)
 
 @st.fragment(run_every=20)
-def live_radar_map():
+def live_radar_map(cf_enabled, ef_enabled):
     m = folium.Map(location=[50.0, 10.0], zoom_start=4, tiles=("CartoDB dark_matter" if map_theme == "Dark Mode" else "CartoDB positron"), scrollWheelZoom=False)
 
     for mkr in map_markers:
@@ -440,6 +437,12 @@ def live_radar_map():
     if show_radar:
         raw_radar = fetch_raw_radar()
         for p in raw_radar:
+            # TACTICAL AIRCRAFT FILTERING
+            if p['type'] == 'CFE' and not cf_enabled:
+                continue
+            if p['type'] == 'EFW' and not ef_enabled:
+                continue
+                
             call = p['call']
             flt, dep, arr = call, "UKN", "UKN"
             
@@ -465,7 +468,8 @@ def live_radar_map():
 
     st_folium(m, width=1200, height=800, key="map_stable_v292")
 
-live_radar_map()
+# Call the fragment with the sidebar variables
+live_radar_map(show_cf, show_ef)
 
 # 9. ALERTS & STRATEGY
 st.markdown('<div class="section-header">🔴 Actual Alerts (METAR)</div>', unsafe_allow_html=True)

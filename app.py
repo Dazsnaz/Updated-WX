@@ -17,28 +17,22 @@ st.markdown('<meta http-equiv="refresh" content="900">', unsafe_allow_html=True)
 
 st.markdown("""
     <style>
-    /* 1. HIDE STREAMLIT WHITE SPACE */
+    /* 1. REMOVE ALL STREAMLIT PADDING & MARGINS */
     .block-container {
-        padding: 0 !important;
+        padding: 0rem !important;
+        margin: 0rem !important;
         max-width: 100% !important;
-        overflow: hidden !important;
     }
     
-    /* 2. MAKE THE MAP TRULY FULL SCREEN & FIXED IN THE BACKGROUND */
+    /* 2. FORCE THE MAP IFRAME TO FILL 100% OF THE MONITOR EXACTLY */
     iframe[title="streamlit_folium.st_folium"] {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
         height: 100vh !important;
-        z-index: 0 !important;
-        border: none !important;
+        margin-bottom: -10px !important; 
     }
     
-    /* 3. KEEP HEADER TRANSPARENT BUT FLOAT IT OVER THE MAP */
+    /* 3. KEEP HEADER TRANSPARENT SO MAP SHOWS THROUGH */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        z-index: 999999 !important; 
     }
     
     /* 4. HIGH VISIBILITY SIDEBAR TOGGLE ARROW (Top Left) */
@@ -46,15 +40,31 @@ st.markdown("""
         background-color: #002366 !important;
         border: 2px solid #d6001a !important;
         border-radius: 5px !important;
-        margin-top: 15px !important;
-        margin-left: 15px !important;
-        padding: 5px !important;
         z-index: 999999 !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        opacity: 1 !important;
+        transition: none !important;
     }
     [data-testid="collapsedControl"] svg {
-        fill: white !important;
         color: white !important;
+        fill: white !important;
+    }
+    
+    /* Catch-all for older Streamlit versions */
+    button[kind="header"] {
+        background-color: #002366 !important;
+        border: 2px solid #d6001a !important;
+        border-radius: 5px !important;
+        z-index: 999999 !important;
+    }
+    button[kind="header"] svg {
+        color: white !important;
+        fill: white !important;
     }
     
     /* 5. HIDE TOP-RIGHT MENU (3 DOTS) */
@@ -432,8 +442,8 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-# st_folium wraps the map; CSS forces the iframe inside to break out and stretch 100vh!
-st_folium(m, width=None, height=1000, use_container_width=True, key="map_stable_v30")
+# Setting a massive fallback height; CSS `100vh` strictly locks it to your monitor's bottom edge.
+st_folium(m, width=None, height=2500, use_container_width=True, key="map_stable_v30")
 
 # 12. RENDER STRATEGY BRIEF FLOATING AT THE BOTTOM
 if st.session_state.investigate_iata != "None":

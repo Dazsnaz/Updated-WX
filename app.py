@@ -10,84 +10,70 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 # 1. PAGE CONFIG
-st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️")
+st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️", initial_sidebar_state="expanded")
 
-# 2. FULL SCREEN UI ENGINE & 15-MIN REFRESH
+# 2. FULL SCREEN UI & 15-MIN BROWSER REFRESH
 st.markdown('<meta http-equiv="refresh" content="900">', unsafe_allow_html=True)
 
 st.markdown("""
     <style>
-    /* REMOVE ALL MARGINS FOR EDGE-TO-EDGE MAP */
+    /* 1. REMOVE ALL STREAMLIT PADDING */
     .block-container {
         padding-top: 0rem !important;
         padding-bottom: 0rem !important;
         padding-left: 0rem !important;
         padding-right: 0rem !important;
         max-width: 100% !important;
-        overflow-x: hidden;
     }
     
-    /* MAKE HEADER TRANSPARENT BUT KEEP SIDEBAR BUTTON VISIBLE */
+    /* 2. MAKE HEADER TRANSPARENT (Keeps Sidebar Toggle Visible) */
     header[data-testid="stHeader"] {
-        background-color: transparent !important;
+        background: transparent !important;
     }
     
-    /* HIDE THE TOP RIGHT STREAMLIT MENU FOR A CLEANER LOOK */
-    .stAppToolbar { display: none !important; }
-    
-    /* FORCE THE MAP TO FILL THE SCREEN HEIGHT DYNAMICALLY */
-    iframe[title="streamlit_folium.st_folium"] {
-        height: 95vh !important;
+    /* 3. HIDE RIGHT-SIDE TOOLBAR ONLY */
+    .stAppToolbar {
+        display: none !important;
     }
     
-    /* SIDEBAR BACKGROUND COLOR FIX */
-    section[data-testid="stSidebar"] {
-        background-color: #002366 !important;
-        border-right: 3px solid #d6001a !important;
-    }
-    section[data-testid="stSidebar"] > div {
-        background-color: transparent !important;
-    }
-    
-    /* SIDEBAR TEXT COLORS */
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] span, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] label {
-        color: white !important;
-    }
-    
-    /* SIDEBAR TOGGLE ARROW FIX (When collapsed) */
-    [data-testid="collapsedControl"] {
+    /* 4. STYLE THE SIDEBAR TOGGLE BUTTON SO IT IS HIGHLY VISIBLE */
+    button[kind="header"] {
         background-color: #002366 !important;
         color: white !important;
-        border: 2px solid #d6001a !important;
         border-radius: 5px !important;
         margin-top: 10px !important;
+        margin-left: 10px !important;
     }
-
-    /* BUTTONS */
+    
+    /* 5. FORCE THE MAP TO FILL 100% OF THE MONITOR HEIGHT */
+    iframe {
+        height: 100vh !important;
+        max-height: 100vh !important;
+    }
+    
+    /* 6. SIDEBAR COLORS */
+    div[data-testid="stSidebar"] { background-color: #002366 !important; min-width: 380px !important; border-right: 3px solid #d6001a; }
+    div[data-testid="stSidebar"] label p { color: #ffffff !important; font-weight: bold; }
+    
     .stButton button { width: 100% !important; border: 1px solid white !important; font-weight: bold !important; }
     .stButton button[kind="secondary"] { background-color: #eb8f34 !important; color: white !important; }
     .stButton button[kind="primary"] { background-color: #d6001a !important; color: white !important; }
     
-    /* EXPANDERS */
     div[data-testid="stExpander"] { background-color: #001a33 !important; border: 1px solid #005a9c !important; border-radius: 8px !important; }
     div[data-testid="stExpander"] summary p { font-weight: bold !important; font-size: 1.1rem !important; color: white !important; }
     
-    /* DROPDOWNS */
     div[data-testid="stSelectbox"] div[data-baseweb="select"], div[data-testid="stDateInput"] div { background-color: white !important; }
     div[data-testid="stSelectbox"] p, div[data-testid="stDateInput"] p { color: #002366 !important; font-weight: 800 !important; }
+    div[data-testid="stSelectbox"] span, div[data-testid="stDateInput"] span { color: #002366 !important; font-weight: 800 !important; }
     
-    /* FLOATING OVERLAY HUD */
-    .floating-hud { position: fixed; top: 15px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 999999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
+    /* 7. FLOATING HUD */
+    .floating-hud { position: fixed; top: 20px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 999999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
     
-    /* STRATEGY BRIEF BOX */
-    .reason-box { background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; margin: 20px auto; max-width: 1400px; border-top: 10px solid #d6001a; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    /* 8. STRATEGY BRIEF POPUP */
+    .reason-box { position: absolute; z-index: 999999; bottom: 30px; left: 50%; transform: translateX(-50%); background-color: #ffffff !important; border: 1px solid #ddd; padding: 25px; border-radius: 5px; width: 90%; max-width: 1400px; border-top: 10px solid #d6001a; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
     .reason-box p, .reason-box h3, .reason-box td, .reason-box th, .reason-box b, .reason-box div, .reason-box span { color: #002366 !important; }
     .reason-box .alt-highlight { color: #d6001a !important; font-weight: bold !important; }
     
-    /* MAP POPUPS */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -439,11 +425,11 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-# 95vh height makes it fill exactly 95% of your screen top-to-bottom.
-st_folium(m, width=None, height=1000, use_container_width=True, key="map_stable_v30")
+# Setting a very large fallback height, CSS forces it to match monitor height (100vh) exactly
+st_folium(m, width=None, height=1200, use_container_width=True, key="map_stable_v30")
 
 
-# 12. RENDER STRATEGY BRIEF UNDER THE MAP
+# 12. RENDER STRATEGY BRIEF FLOATING AT THE BOTTOM
 if st.session_state.investigate_iata != "None":
     iata = st.session_state.investigate_iata
     d, info = weather_data.get(iata, {}), base_airports.get(iata, {"rwy": 0, "lat": 0, "lon": 0})
@@ -470,7 +456,30 @@ if st.session_state.investigate_iata != "None":
     rwy_brief = f"RWY {int(info['rwy']/10):02d}/{int(((info['rwy']+180)%360)/10):02d}"
     this_trend = next((m['trend'] for m in map_markers if m['iata'] == iata), "➡️")
     
-    st.markdown(f"""<div class="reason-box"><h3>{iata} Strategy Brief {this_trend}</h3><div style="display:flex; gap:40px;"><div style="flex:1;"><p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{cur_xw}kt</b>.</p><p><b>Tactical Alternate Recommendations:</b></p><table class="alt-table"><tr><th>Alternate</th><th>Dist (NM)</th><th>Live X-Wind</th><th>Status</th></tr>{"".join([f"<tr><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>STABLE</span></td></tr>" for a in alt_list])}</table></div><div style="flex:1;"><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;"><b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div></div><div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;"><b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div></div></div></div></div>""", unsafe_allow_html=True)
+    # Strategy Brief box rendered as an absolute overlay
+    st.markdown(f"""
+    <div class="reason-box">
+        <h3 style="margin-top:0;">{iata} Strategy Brief {this_trend}</h3>
+        <div style="display:flex; gap:40px;">
+            <div style="flex:1;">
+                <p><b>Active Hazards ({time_horizon}):</b> {issue_desc}. Live {rwy_brief} X-Wind <b>{cur_xw}kt</b>.</p>
+                <p><b>Tactical Alternate Recommendations:</b></p>
+                <table style="width:100%; border-collapse: collapse; text-align: left;">
+                    <tr style="border-bottom: 2px solid #002366;"><th>Alternate</th><th>Dist (NM)</th><th>Live X-Wind</th><th>Status</th></tr>
+                    {"".join([f"<tr style='border-bottom: 1px solid #ddd;'><td><b>{a['iata']}</b></td><td>{a['dist']}</td><td>{a['xw']} kt</td><td><span class='alt-highlight'>STABLE</span></td></tr>" for a in alt_list])}
+                </table>
+            </div>
+            <div style="flex:1;">
+                <div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366; margin-bottom:10px;">
+                    <b>LIVE METAR</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_m'))}</div>
+                </div>
+                <div style="padding:10px; background:#f9f9f9; border-radius:5px; border-left:4px solid #002366;">
+                    <b>LIVE TAF</b><div style="font-family:monospace; font-size:14px;">{bold_hazard(d.get('raw_t'))}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:

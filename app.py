@@ -12,53 +12,46 @@ from datetime import datetime, timedelta, timezone
 # 1. PAGE CONFIG
 st.set_page_config(layout="wide", page_title="BA OCC HUD", page_icon="✈️", initial_sidebar_state="expanded")
 
-# 2. IRONCLAD FULL-SCREEN CSS
+# 2. V30.7 "PLAY NICE" CSS + COLOR & DROPDOWN FIXES
 st.markdown('<meta http-equiv="refresh" content="900">', unsafe_allow_html=True)
 
 st.markdown("""
     <style>
-    /* 1. HIDE ALL STREAMLIT MARGINS */
+    /* 1. REMOVE ALL PADDING SO MAP TOUCHES THE EDGES */
     .block-container, [data-testid="stMainBlockContainer"] {
-        padding: 0 !important;
-        margin: 0 !important;
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
         max-width: 100% !important;
     }
     
-    /* 2. GHOST HEADER: Let's you click the Map Zoom buttons underneath! */
-    header[data-testid="stHeader"] { 
-        background: transparent !important; 
-        pointer-events: none !important; 
+    /* 2. HEADER RESTORED: Matches dark background so Arrow stays visible */
+    header[data-testid="stHeader"] {
+        background-color: #001a33 !important;
     }
     .stAppToolbar { display: none !important; }
     
-    /* 3. BRIGHT RED SIDEBAR ARROW (Moved down to clear Zoom Buttons) */
-    [data-testid="collapsedControl"] {
-        background-color: #d6001a !important; /* BA RED */
-        pointer-events: auto !important; /* Makes it clickable */
-        border: 2px solid white !important;
+    /* 3. BA RED SIDEBAR ARROW (Highly visible in top left) */
+    [data-testid="collapsedControl"], button[kind="header"] {
+        background-color: #d6001a !important;
         border-radius: 5px !important;
-        position: fixed !important;
-        top: 90px !important; /* Safely below the +/- Map Zoom */
-        left: 15px !important;
-        z-index: 999999 !important;
+        margin-top: 10px !important;
+        margin-left: 10px !important;
         padding: 5px !important;
-        transform: none !important;
     }
-    [data-testid="collapsedControl"] svg { fill: white !important; color: white !important; }
+    [data-testid="collapsedControl"] svg, button[kind="header"] svg {
+        fill: white !important;
+        color: white !important;
+    }
     
-    /* 4. ABSOLUTE FULL SCREEN MAP (Forces 100% of Monitor) */
+    /* 4. FORCE MAP TO FILL EXACT VIEWPORT HEIGHT */
     iframe[title="streamlit_folium.st_folium"] {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
         height: 100vh !important;
-        z-index: 0 !important;
-        border: none !important;
     }
     
     /* 5. FORCE SIDEBAR BACKGROUND TO DARK BLUE */
-    section[data-testid="stSidebar"] { background-color: #002366 !important; border-right: 3px solid #d6001a; z-index: 999999 !important; }
+    section[data-testid="stSidebar"] { background-color: #002366 !important; border-right: 3px solid #d6001a !important; }
     section[data-testid="stSidebar"] > div { background-color: #002366 !important; }
     
     /* 6. SIDEBAR TEXT CONTRAST (White text on Blue) */
@@ -72,7 +65,7 @@ st.markdown("""
     }
     
     /* 7. DROPDOWN MENU FIX (Dark text on White background) */
-    div[data-baseweb="select"] > div { background-color: white !important; }
+    div[data-baseweb="select"] > div { background-color: white !important; border: 2px solid #d6001a !important; }
     div[data-baseweb="select"] * { color: #002366 !important; font-weight: bold !important; }
     ul[role="listbox"] { background-color: white !important; }
     ul[role="listbox"] li { color: #002366 !important; font-weight: bold !important; }
@@ -84,13 +77,12 @@ st.markdown("""
     .stButton button[kind="primary"] { background-color: #d6001a !important; color: white !important; }
     
     /* 9. EXPANDERS */
-    div[data-testid="stExpander"] { background-color: #001a33 !important; border: 1px solid #005a9c !important; border-radius: 8px !important; margin-bottom: 10px !important; }
-    div[data-testid="stExpander"] summary p { font-size: 1.1rem !important; }
+    div[data-testid="stExpander"] { background-color: #001a33 !important; border: 1px solid #005a9c !important; border-radius: 8px !important; margin-bottom: 10px !important;}
+    div[data-testid="stExpander"] summary p { font-size: 1.1rem !important; color: white !important; }
     
-    /* 10. FLOATING HUD CLOCK (Top Right) */
-    .floating-hud { position: fixed; top: 15px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 999998; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
+    /* 10. OVERLAYS */
+    .floating-hud { position: absolute; top: 65px; right: 20px; background-color: rgba(0, 35, 102, 0.85); border: 2px solid #d6001a; padding: 10px 25px; border-radius: 8px; color: white; font-weight: bold; z-index: 9999; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; gap: 20px; font-size: 1.1rem; pointer-events: none; }
     
-    /* 11. MAP POPUPS */
     .leaflet-tooltip, .leaflet-popup-content-wrapper { background: white !important; border: 2px solid #002366 !important; padding: 0 !important; opacity: 1 !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -144,7 +136,7 @@ def load_schedule_robust(file_bytes):
     except Exception as e:
         return pd.DataFrame()
 
-# 4. MASTER DATABASE (Fixed to default 'Both' for overlapping stations)
+# 4. MASTER DATABASE
 base_airports = {
     "LCY": {"icao": "EGLC", "lat": 51.505, "lon": 0.055, "rwy": 270, "fleet": "Cityflyer", "spec": True},
     "AMS": {"icao": "EHAM", "lat": 52.313, "lon": 4.764, "rwy": 180, "fleet": "Cityflyer", "spec": False},
@@ -199,7 +191,10 @@ base_airports = {
     "MUC": {"icao": "EDDM", "lat": 48.353, "lon": 11.786, "rwy": 80, "fleet": "Both", "spec": False},
 }
 
+# STARTUP MEMORY (This fixes the AttributeError crash!)
 if 'investigate_iata' not in st.session_state: st.session_state.investigate_iata = "None"
+if "map_center" not in st.session_state: st.session_state.map_center = [50.0, 10.0]
+if "map_zoom" not in st.session_state: st.session_state.map_zoom = 5
 SCHEDULE_FILE = "active_schedule.csv"
 
 # 5. WEATHER ENGINE (Runs first so Sidebar can use the data)
@@ -484,4 +479,5 @@ m = folium.Map(location=st.session_state.map_center, zoom_start=st.session_state
 for mkr in map_markers:
     folium.CircleMarker(location=[mkr['lat'], mkr['lon']], radius=7, color=mkr['color'], fill=True, popup=folium.Popup(mkr['content'], max_width=650, auto_pan=True, auto_pan_padding=(150, 150)), tooltip=folium.Tooltip(mkr['content'], direction='top', sticky=False)).add_to(m)
 
-st_folium(m, width="100%", height=1000, key="map_stable_v30")
+# 1200 height pushes it out so it fills modern screens cleanly without absolute vh hacks
+st_folium(m, width=None, height=1200, use_container_width=True, key="map_stable_v30")
